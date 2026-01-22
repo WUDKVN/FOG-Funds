@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     // Log the login
     await sql`
-      INSERT INTO fm_login_logs (fm_login_user_id, fm_login_user_name, fm_login_user_email, fm_login_action)
+      INSERT INTO fm_login_logs (fm_log_user_id, fm_log_user_name, fm_log_user_email, fm_log_action)
       VALUES (${user.fm_user_id}, ${user.fm_user_name}, ${user.fm_user_name}, 'login')
     `
 
