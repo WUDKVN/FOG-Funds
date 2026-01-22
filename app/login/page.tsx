@@ -13,7 +13,7 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-md mx-auto space-y-6 bg-white p-8 rounded-xl border border-gray-200 shadow-xl">
-          <PageHeader title="Welcome Back" description="Sign in to your account to continue" />
+          <PageHeader title="Bienvenue" description="Connectez-vous pour continuer" />
           <LoginForm />
         </div>
       </div>

@@ -2,86 +2,92 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle2 } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 
 export function LoginForm() {
-  const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
-  const searchParams = useSearchParams()
 
-  useEffect(() => {
-    // Check for success messages from redirects
-    if (searchParams.get("registered") === "true") {
-      setSuccessMessage("Account created successfully! Please sign in.")
-    } else if (searchParams.get("reset") === "true") {
-      setSuccessMessage("Password reset successfully! Please sign in with your new password.")
-    }
-  }, [searchParams])
+  // Validate username: only letters and numbers
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/[^a-zA-Z0-9]/g, "")
+    setUsername(value)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
-    // Simulate authentication delay
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.error || "Erreur de connexion")
+        setIsLoading(false)
+        return
+      }
+
       // Store the logged in user info in localStorage
-      const userName = email.split("@")[0] // Use the part before @ as username
-      localStorage.setItem(
-        "loggedInUser",
-        JSON.stringify({
-          id: `user-${Date.now()}`,
-          name: userName.charAt(0).toUpperCase() + userName.slice(1), // Capitalize first letter
-          email: email,
-        }),
-      )
-      setIsLoading(false)
+      localStorage.setItem("loggedInUser", JSON.stringify(data.user))
+
       router.push("/")
-    }, 1500)
+    } catch (err) {
+      console.error("Login error:", err)
+      setError("Erreur de connexion. Veuillez réessayer.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
     <div className="space-y-6">
-      {successMessage && (
-        <Alert className="border-green-500 bg-green-50 text-green-800">
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
-          <AlertDescription>{successMessage}</AlertDescription>
+      {error && (
+        <Alert className="border-red-500 bg-red-50 text-red-800">
+          <AlertCircle className="h-4 w-4 text-red-500" />
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="username">Nom d'utilisateur</Label>
           <Input
-            id="email"
-            type="email"
-            placeholder="name@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            id="username"
+            type="text"
+            placeholder="Entrez votre nom d'utilisateur"
+            value={username}
+            onChange={handleUsernameChange}
+            pattern="[a-zA-Z0-9]+"
+            title="Lettres et chiffres uniquement"
             required
           />
         </div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
-            <Link href="/forgot-password" className="text-sm text-gray-500 hover:text-gray-900">
-              Forgot password?
-            </Link>
-          </div>
+          <Label htmlFor="password">Mot de passe</Label>
           <Input
             id="password"
             type="password"
+            placeholder="Entrez votre mot de passe"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -94,19 +100,13 @@ export function LoginForm() {
             onCheckedChange={(checked) => setRememberMe(checked === true)}
           />
           <Label htmlFor="remember-me" className="text-sm font-normal">
-            Remember me
+            Se souvenir de moi
           </Label>
         </div>
         <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Signing in..." : "Sign in"}
+          {isLoading ? "Connexion en cours..." : "Se connecter"}
         </Button>
       </form>
-      <div className="text-center text-sm text-gray-500">
-        Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-primary hover:underline">
-          Sign up
-        </Link>
-      </div>
     </div>
   )
 }
