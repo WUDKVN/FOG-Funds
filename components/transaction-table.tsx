@@ -157,8 +157,8 @@ export function TransactionTable() {
     }
   }, [])
 
-  // Helper function to add activity log
-  const addActivityLog = (
+  // Helper function to add activity log - saves to database
+  const addActivityLog = async (
     action: ActivityLog["action"],
     description: string,
     personName?: string,
@@ -176,7 +176,42 @@ export function TransactionTable() {
       amount,
     }
     setActivityLogs((prev) => [newLog, ...prev])
+
+    // Save to database
+    try {
+      await fetch("/api/activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          action,
+          category: viewMode,
+          description,
+          personName,
+          amount,
+        }),
+      })
+    } catch (error) {
+      console.error("Error saving activity log:", error)
+    }
   }
+
+  // Load activity logs from database on mount
+  useEffect(() => {
+    const fetchActivityLogs = async () => {
+      try {
+        const response = await fetch("/api/activity")
+        const data = await response.json()
+        if (data.logs) {
+          setActivityLogs(data.logs)
+        }
+      } catch (error) {
+        console.error("Error fetching activity logs:", error)
+      }
+    }
+    fetchActivityLogs()
+  }, [])
 
   // Get translations based on current language
   const t = translations[language]
@@ -766,23 +801,24 @@ export function TransactionTable() {
     <div className="space-y-4">
       <div className="flex flex-col gap-4">
         {/* View Mode Switch */}
-        <div className="bg-muted/40 p-4 rounded-lg border">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center space-x-2">
-              <Switch id="view-mode" checked={viewMode === "i-owe-them"} onCheckedChange={toggleViewMode} />
-              <Label htmlFor="view-mode" className="font-medium">
-                {viewMode === "they-owe-me" ? t.peopleWhoOweMe : t.peopleIOwe}
-              </Label>
-            </div>
-            <div className="flex items-center gap-4">
-              <p className="text-sm text-muted-foreground">
-                {viewMode === "they-owe-me" ? t.showingPeopleWhoOweYou : t.showingPeopleYouOwe}
-              </p>
-              <Button variant="outline" size="sm" onClick={toggleLanguage} className="flex items-center gap-2 bg-transparent">
-                <Globe className="h-4 w-4" />
-                {language === "fr" ? "English" : "Français"}
+        <div className="bg-muted/40 p-3 sm:p-4 rounded-lg border">
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Switch id="view-mode" checked={viewMode === "i-owe-them"} onCheckedChange={toggleViewMode} />
+                <Label htmlFor="view-mode" className="font-medium text-sm sm:text-base">
+                  {viewMode === "they-owe-me" ? t.peopleWhoOweMe : t.peopleIOwe}
+                </Label>
+              </div>
+              <Button variant="outline" size="sm" onClick={toggleLanguage} className="flex items-center gap-1 sm:gap-2 bg-transparent text-xs sm:text-sm">
+                <Globe className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">{language === "fr" ? "English" : "Français"}</span>
+                <span className="sm:hidden">{language === "fr" ? "EN" : "FR"}</span>
               </Button>
             </div>
+            <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
+              {viewMode === "they-owe-me" ? t.showingPeopleWhoOweYou : t.showingPeopleYouOwe}
+            </p>
           </div>
         </div>
 
@@ -816,35 +852,35 @@ export function TransactionTable() {
               </Button>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1 sm:gap-2 flex-wrap justify-end">
             {isAdmin && (
               <>
-                <Button variant="outline" onClick={() => setIsHistoryOpen(true)}>
-                  <History className="h-4 w-4 mr-2" />
-                  {t.viewHistory}
+                <Button variant="outline" size="sm" onClick={() => setIsHistoryOpen(true)} className="text-xs sm:text-sm">
+                  <History className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">{t.viewHistory}</span>
                 </Button>
-                <Button variant="outline" onClick={() => setIsLogsOpen(true)}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  {t.viewLogs}
+                <Button variant="outline" size="sm" onClick={() => setIsLogsOpen(true)} className="text-xs sm:text-sm">
+                  <FileText className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">{t.viewLogs}</span>
                 </Button>
               </>
             )}
-            <Button onClick={() => setIsNewTransactionOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t.newTransaction}
+            <Button size="sm" onClick={() => setIsNewTransactionOpen(true)} className="text-xs sm:text-sm">
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">{t.newTransaction}</span>
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="rounded-md border">
-        <div className="max-h-[600px] overflow-y-auto">
+      <div className="rounded-md border overflow-hidden">
+        <div className="max-h-[60vh] sm:max-h-[600px] overflow-y-auto overflow-x-auto">
           <Table>
-            <TableHeader className="sticky top-0 bg-white">
+            <TableHeader className="sticky top-0 bg-white z-10">
               <TableRow>
-                <TableHead className="w-[200px]">{t.company}</TableHead>
-                <TableHead className="text-center">{t.runningBalance}</TableHead>
-                <TableHead className="w-[120px] text-right">{t.details}</TableHead>
+                <TableHead className="min-w-[120px] sm:w-[200px]">{t.company}</TableHead>
+                <TableHead className="text-center min-w-[140px]">{t.runningBalance}</TableHead>
+                <TableHead className="min-w-[100px] sm:w-[120px] text-right">{t.details}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -876,36 +912,39 @@ export function TransactionTable() {
                                           )}
                                         </TableCell>
                         <TableCell className="text-center">
-                          <span className={`${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"}`}>
-                            {viewMode === "they-owe-me" ? "+" : "-"} FCFA {formatCurrency(totalAmount)}
-                          </span>
-                          {totalAmount > 0 ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 px-2 text-xs ml-2 bg-transparent"
-                              onClick={() => handleEditTransaction(person.id)}
-                            >
-                              {t.edit}
-                            </Button>
-                          ) : (
-                            <Button variant="outline" size="sm" className="h-6 px-2 text-xs ml-2 bg-transparent" disabled>
-                              {t.edit}
-                            </Button>
-                          )}
+                          <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+                            <span className={`text-sm sm:text-base whitespace-nowrap ${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"}`}>
+                              {viewMode === "they-owe-me" ? "+" : "-"} FCFA {formatCurrency(totalAmount)}
+                            </span>
+                            {totalAmount > 0 ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 px-2 text-xs bg-transparent"
+                                onClick={() => handleEditTransaction(person.id)}
+                              >
+                                {t.edit}
+                              </Button>
+                            ) : (
+                              <Button variant="outline" size="sm" className="h-6 px-2 text-xs bg-transparent" disabled>
+                                {t.edit}
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end gap-1 sm:gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleSoldOutClick(person)}
                               disabled={totalAmount === 0}
+                              className="text-xs sm:text-sm px-2 sm:px-3"
                             >
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              {t.settle}
+                              <CheckCircle className="h-4 w-4 sm:mr-2" />
+                              <span className="hidden sm:inline">{t.settle}</span>
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => toggleExpand(person.id)}>
+                            <Button variant="ghost" size="icon" onClick={() => toggleExpand(person.id)} className="h-8 w-8 sm:h-9 sm:w-9">
                               {expandedPerson === person.id ? (
                                 <ChevronUp className="h-4 w-4" />
                               ) : (
