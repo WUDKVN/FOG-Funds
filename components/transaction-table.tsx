@@ -978,7 +978,6 @@ export function TransactionTable() {
       <LogsDialog
         open={isLogsOpen}
         onClose={() => setIsLogsOpen(false)}
-        loginLogs={loginLogs}
         language={language}
         isAdmin={isAdmin}
       />

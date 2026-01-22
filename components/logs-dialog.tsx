@@ -1,16 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, LogIn, LogOut } from "lucide-react"
+import { Search, LogIn, LogOut, RefreshCw } from "lucide-react"
 import type { LoginLog } from "@/lib/types"
 
 interface LogsDialogProps {
   open: boolean
   onClose: () => void
-  loginLogs: LoginLog[]
   language?: "fr" | "en"
   isAdmin: boolean
 }
@@ -65,18 +64,36 @@ function formatDateTime(timestamp: string): string {
   return `${dateStr} ${timeStr}`
 }
 
-export function LogsDialog({ open, onClose, loginLogs, language = "fr", isAdmin }: LogsDialogProps) {
+export function LogsDialog({ open, onClose, language = "fr", isAdmin }: LogsDialogProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [loginLogs, setLoginLogs] = useState<LoginLog[]>([])
+  const [isLoading, setIsLoading] = useState(false)
   const t = translations[language]
 
-  // Filter logs older than 2 weeks (client-side filtering)
-  const twoWeeksAgo = new Date()
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
-  
-  const recentLogs = loginLogs.filter((log) => new Date(log.createdAt) >= twoWeeksAgo)
+  // Fetch logs from database when dialog opens
+  useEffect(() => {
+    if (open && isAdmin) {
+      fetchLogs()
+    }
+  }, [open, isAdmin])
+
+  const fetchLogs = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/logs")
+      const data = await response.json()
+      if (data.logs) {
+        setLoginLogs(data.logs)
+      }
+    } catch (error) {
+      console.error("Error fetching logs:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   // Sort by timestamp (most recent first)
-  const sortedLogs = [...recentLogs].sort(
+  const sortedLogs = [...loginLogs].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
 
@@ -109,18 +126,27 @@ export function LogsDialog({ open, onClose, loginLogs, language = "fr", isAdmin 
             <h3 className="text-lg font-medium mb-2">{t.allLogs}</h3>
             <p className="text-sm text-muted-foreground mb-4">{t.autoDeleteNote}</p>
 
-            {/* Search bar */}
-            <div className="relative mb-4">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={t.searchPlaceholder}
-                className="pl-8 pr-4"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            {/* Search bar with refresh */}
+            <div className="flex gap-2 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t.searchPlaceholder}
+                  className="pl-8 pr-4"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Button variant="outline" size="icon" onClick={fetchLogs} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              </Button>
             </div>
 
-            {filteredLogs.length === 0 ? (
+            {isLoading ? (
+              <div className="text-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+              </div>
+            ) : filteredLogs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">{t.noLogs}</div>
             ) : (
               <div className="border rounded-md overflow-hidden">
