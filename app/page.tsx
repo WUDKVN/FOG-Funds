@@ -24,6 +24,29 @@ export default function Home() {
     setIsLoading(false)
   }, [router])
 
+  // Security: Auto logout when user leaves the page or switches tabs
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        // User switched tab or minimized - log them out
+        localStorage.removeItem("loggedInUser")
+      }
+    }
+
+    const handleBeforeUnload = () => {
+      // User closing tab/window or navigating away - log them out
+      localStorage.removeItem("loggedInUser")
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+  }, [])
+
   const handleLogout = () => {
     localStorage.removeItem("loggedInUser")
     router.push("/login")
