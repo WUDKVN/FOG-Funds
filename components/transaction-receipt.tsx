@@ -41,7 +41,12 @@ export function TransactionReceipt({
   paymentAmount,
 }: TransactionReceiptProps) {
   // Get today's date in YYYY-MM-DD format
-  const today = "2025-04-04"
+  const today = new Date().toISOString().split("T")[0]
+
+  // Early return if person is undefined
+  if (!person) {
+    return null
+  }
 
   // Calculate total amount for the person
   const calculateTotal = () => {

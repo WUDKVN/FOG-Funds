@@ -44,10 +44,10 @@ export default function Home() {
   return (
     <main className="container mx-auto py-6 px-4 md:px-6">
       <div className="flex justify-between items-center mb-8">
-        <div className="flex items-center gap-4">
+        <Link href="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity">
           <Image src="/images/vonamawu-logo.png" alt="VONAMAWU Logo" width={70} height={70} />
           <h1 className="text-2xl font-bold tracking-tight">Fund Management</h1>
-        </div>
+        </Link>
         <Button variant="outline" size="sm" onClick={handleLogout}>
           <LogOut className="h-4 w-4 mr-2" />
           Deconnexion
