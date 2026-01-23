@@ -127,10 +127,12 @@ export function TransactionTable() {
   // Check if current user is admin
   const isAdmin = currentUser.role === "admin"
 
-  // Load user from localStorage on mount
+  // Load user from localStorage or sessionStorage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const storedUser = localStorage.getItem("loggedInUser")
+      const localUser = localStorage.getItem("loggedInUser")
+      const sessionUser = sessionStorage.getItem("loggedInUser")
+      const storedUser = localUser || sessionUser
       if (storedUser) {
         try {
           const user = JSON.parse(storedUser)
@@ -139,22 +141,34 @@ export function TransactionTable() {
             name: user.name || user.email || "Admin",
             role: user.role || "admin",
           })
-
-          // Add login log when user loads
-          const loginLog: LoginLog = {
-            id: `login-${Date.now()}`,
-            userId: user.id || "user1",
-            userName: user.name || user.email || "Admin",
-            userEmail: user.email || "",
-            action: "login",
-            createdAt: new Date().toISOString(),
-          }
-          setLoginLogs((prev) => [loginLog, ...prev])
         } catch {
           // Use default user if parsing fails
         }
       }
     }
+  }, [])
+
+  // Auto-refresh data every 5 seconds for real-time updates across users
+  useEffect(() => {
+    const fetchLatestData = async () => {
+      try {
+        const response = await fetch("/api/activity")
+        const data = await response.json()
+        if (data.logs) {
+          setActivityLogs(data.logs)
+        }
+      } catch (error) {
+        console.error("Error fetching activity logs:", error)
+      }
+    }
+
+    // Initial fetch
+    fetchLatestData()
+
+    // Set up polling interval
+    const intervalId = setInterval(fetchLatestData, 5000)
+
+    return () => clearInterval(intervalId)
   }, [])
 
   // Helper function to add activity log - saves to database
@@ -197,21 +211,7 @@ export function TransactionTable() {
     }
   }
 
-  // Load activity logs from database on mount
-  useEffect(() => {
-    const fetchActivityLogs = async () => {
-      try {
-        const response = await fetch("/api/activity")
-        const data = await response.json()
-        if (data.logs) {
-          setActivityLogs(data.logs)
-        }
-      } catch (error) {
-        console.error("Error fetching activity logs:", error)
-      }
-    }
-    fetchActivityLogs()
-  }, [])
+  
 
   // Get translations based on current language
   const t = translations[language]

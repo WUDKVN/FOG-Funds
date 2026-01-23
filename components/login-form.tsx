@@ -48,8 +48,18 @@ export function LoginForm() {
         return
       }
 
-      // Store the logged in user info in localStorage
-      localStorage.setItem("loggedInUser", JSON.stringify(data.user))
+      // Store the logged in user info
+      const userData = { ...data.user, rememberMe }
+      
+      if (rememberMe) {
+        // Use localStorage for persistent login (survives browser close)
+        localStorage.setItem("loggedInUser", JSON.stringify(userData))
+        sessionStorage.removeItem("loggedInUser")
+      } else {
+        // Use sessionStorage for session-only login (cleared when browser closes)
+        sessionStorage.setItem("loggedInUser", JSON.stringify(userData))
+        localStorage.removeItem("loggedInUser")
+      }
 
       router.push("/")
     } catch (err) {
