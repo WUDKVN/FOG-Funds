@@ -139,12 +139,13 @@ export function HistoryDialog({ open, onClose, activityLogs, viewMode, language 
           ) : (
             <div className="border rounded-md overflow-hidden">
               <div className="max-h-[400px] overflow-y-auto">
-                <table className="w-full">
+                {/* Desktop table - hidden on mobile */}
+                <table className="w-full hidden sm:table">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
-                      <th className="px-4 py-2 text-left font-medium">{t.user}</th>
-                      <th className="px-4 py-2 text-left font-medium">{t.dateTime}</th>
-                      <th className="px-4 py-2 text-left font-medium">{t.details}</th>
+                      <th className="px-4 py-2 text-left font-medium text-sm">{t.user}</th>
+                      <th className="px-4 py-2 text-left font-medium text-sm">{t.dateTime}</th>
+                      <th className="px-4 py-2 text-left font-medium text-sm">{t.details}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -153,15 +154,31 @@ export function HistoryDialog({ open, onClose, activityLogs, viewMode, language 
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             {getActionIcon(log.action)}
-                            <span className="font-medium">{log.userName}</span>
+                            <span className="font-medium text-sm">{log.userName}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">{formatDateTime(log.timestamp)}</td>
-                        <td className="px-4 py-3">{log.description}</td>
+                        <td className="px-4 py-3 text-sm">{log.description}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                
+                {/* Mobile card layout */}
+                <div className="sm:hidden divide-y">
+                  {filteredLogs.map((log) => (
+                    <div key={log.id} className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {getActionIcon(log.action)}
+                          <span className="font-medium text-sm">{log.userName}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{formatDateTime(log.timestamp)}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{log.description}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

@@ -149,66 +149,64 @@ export function LogsDialog({ open, onClose, language = "fr", isAdmin }: LogsDial
             ) : filteredLogs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">{t.noLogs}</div>
             ) : (
-              <>
-                {/* Desktop table view */}
-                <div className="hidden md:block border rounded-md overflow-hidden">
-                  <div className="max-h-[400px] overflow-y-auto">
-                    <table className="w-full table-fixed">
-                      <thead className="bg-muted/50 sticky top-0">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium w-1/4">{t.user}</th>
-                          <th className="px-3 py-2 text-left font-medium w-1/4">{t.action}</th>
-                          <th className="px-3 py-2 text-left font-medium w-1/2">{t.dateTime}</th>
+              <div className="border rounded-md overflow-hidden">
+                <div className="max-h-[400px] overflow-y-auto">
+                  {/* Desktop table - hidden on mobile */}
+                  <table className="w-full hidden sm:table">
+                    <thead className="bg-muted/50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium text-sm">{t.user}</th>
+                        <th className="px-4 py-2 text-left font-medium text-sm">{t.action}</th>
+                        <th className="px-4 py-2 text-left font-medium text-sm">{t.dateTime}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredLogs.map((log) => (
+                        <tr key={log.id} className="border-t">
+                          <td className="px-4 py-3 font-medium text-sm">{log.userName}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              {log.action === "login" ? (
+                                <LogIn className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <LogOut className="h-4 w-4 text-red-500" />
+                              )}
+                              <span className={`text-sm ${log.action === "login" ? "text-green-600" : "text-red-600"}`}>
+                                {log.action === "login" ? t.login : t.logout}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm">{formatDateTime(log.createdAt)}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {filteredLogs.map((log) => (
-                          <tr key={log.id} className="border-t">
-                            <td className="px-3 py-2 font-medium truncate">{log.userName}</td>
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-1">
-                                {log.action === "login" ? (
-                                  <LogIn className="h-4 w-4 text-green-500 flex-shrink-0" />
-                                ) : (
-                                  <LogOut className="h-4 w-4 text-red-500 flex-shrink-0" />
-                                )}
-                                <span className={`text-sm ${log.action === "login" ? "text-green-600" : "text-red-600"}`}>
-                                  {log.action === "login" ? t.login : t.logout}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-sm">{formatDateTime(log.createdAt)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Mobile card view */}
-                <div className="md:hidden space-y-2 max-h-[400px] overflow-y-auto">
-                  {filteredLogs.map((log) => (
-                    <div key={log.id} className="border rounded-lg p-3 bg-card">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-sm truncate max-w-[120px]">{log.userName}</span>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          {log.action === "login" ? (
-                            <LogIn className="h-3 w-3 text-green-500" />
-                          ) : (
-                            <LogOut className="h-3 w-3 text-red-500" />
-                          )}
-                          <span className={`text-xs ${log.action === "login" ? "text-green-600" : "text-red-600"}`}>
-                            {log.action === "login" ? t.login : t.logout}
-                          </span>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {/* Mobile card layout */}
+                  <div className="sm:hidden divide-y">
+                    {filteredLogs.map((log) => (
+                      <div key={log.id} className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">{log.userName}</span>
+                          <div className="flex items-center gap-1">
+                            {log.action === "login" ? (
+                              <LogIn className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <LogOut className="h-3 w-3 text-red-500" />
+                            )}
+                            <span className={`text-xs ${log.action === "login" ? "text-green-600" : "text-red-600"}`}>
+                              {log.action === "login" ? t.login : t.logout}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatDateTime(log.createdAt)}
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatDateTime(log.createdAt)}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
         )}

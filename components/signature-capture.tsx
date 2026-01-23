@@ -8,9 +8,22 @@ import { Button } from "@/components/ui/button"
 interface SignatureCaptureProps {
   initialSignature?: string
   onSignatureCapture: (signature: string) => void
+  language?: "fr" | "en"
 }
 
-export function SignatureCapture({ initialSignature, onSignatureCapture }: SignatureCaptureProps) {
+const translations = {
+  fr: {
+    clear: "Effacer",
+    signAbove: "Signez ci-dessus pour confirmer les transactions",
+  },
+  en: {
+    clear: "Clear",
+    signAbove: "Sign above to confirm transactions",
+  },
+}
+
+export function SignatureCapture({ initialSignature, onSignatureCapture, language = "fr" }: SignatureCaptureProps) {
+  const t = translations[language]
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [hasSignature, setHasSignature] = useState(!!initialSignature)
@@ -147,10 +160,10 @@ export function SignatureCapture({ initialSignature, onSignatureCapture }: Signa
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" size="sm" onClick={clearSignature} disabled={!hasSignature}>
-          Clear
+          {t.clear}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">Sign above to confirm transactions</p>
+      <p className="text-xs text-muted-foreground">{t.signAbove}</p>
     </div>
   )
 }

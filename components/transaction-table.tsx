@@ -130,9 +130,7 @@ export function TransactionTable() {
   // Load user from localStorage or sessionStorage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const localUser = localStorage.getItem("loggedInUser")
-      const sessionUser = sessionStorage.getItem("loggedInUser")
-      const storedUser = localUser || sessionUser
+      const storedUser = localStorage.getItem("loggedInUser") || sessionStorage.getItem("loggedInUser")
       if (storedUser) {
         try {
           const user = JSON.parse(storedUser)
@@ -141,34 +139,22 @@ export function TransactionTable() {
             name: user.name || user.email || "Admin",
             role: user.role || "admin",
           })
+
+          // Add login log when user loads
+          const loginLog: LoginLog = {
+            id: `login-${Date.now()}`,
+            userId: user.id || "user1",
+            userName: user.name || user.email || "Admin",
+            userEmail: user.email || "",
+            action: "login",
+            createdAt: new Date().toISOString(),
+          }
+          setLoginLogs((prev) => [loginLog, ...prev])
         } catch {
           // Use default user if parsing fails
         }
       }
     }
-  }, [])
-
-  // Auto-refresh data every 5 seconds for real-time updates across users
-  useEffect(() => {
-    const fetchLatestData = async () => {
-      try {
-        const response = await fetch("/api/activity")
-        const data = await response.json()
-        if (data.logs) {
-          setActivityLogs(data.logs)
-        }
-      } catch (error) {
-        console.error("Error fetching activity logs:", error)
-      }
-    }
-
-    // Initial fetch
-    fetchLatestData()
-
-    // Set up polling interval
-    const intervalId = setInterval(fetchLatestData, 5000)
-
-    return () => clearInterval(intervalId)
   }, [])
 
   // Helper function to add activity log - saves to database
@@ -211,7 +197,30 @@ export function TransactionTable() {
     }
   }
 
-  
+  // Fetch activity logs from database
+  const fetchActivityLogs = async () => {
+    try {
+      const response = await fetch("/api/activity")
+      const data = await response.json()
+      if (data.logs) {
+        setActivityLogs(data.logs)
+      }
+    } catch (error) {
+      console.error("Error fetching activity logs:", error)
+    }
+  }
+
+  // Load activity logs on mount and auto-refresh every 3 seconds for real-time sync
+  useEffect(() => {
+    fetchActivityLogs()
+    
+    // Auto-refresh every 3 seconds for real-time sync between users
+    const interval = setInterval(() => {
+      fetchActivityLogs()
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   // Get translations based on current language
   const t = translations[language]
@@ -984,6 +993,7 @@ export function TransactionTable() {
           onClose={() => setEditingTransaction(null)}
           onUpdate={handleUpdateTransaction}
           viewMode={viewMode}
+          language={language}
         />
       )}
 
@@ -994,6 +1004,7 @@ export function TransactionTable() {
         existingPeople={people.map((p) => p.name)}
         initialPersonName={expandedPerson ? people.find((p) => p.id === expandedPerson)?.name : ""}
         viewMode={viewMode}
+        language={language}
       />
 
       <SettleConfirmDialog
@@ -1031,6 +1042,7 @@ export function TransactionTable() {
         isSettlement={receiptData.isSettlement}
         viewMode={viewMode}
         paymentAmount={receiptData.paymentAmount}
+        language={language}
       />
     </div>
   )

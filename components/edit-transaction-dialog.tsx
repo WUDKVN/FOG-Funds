@@ -25,6 +25,43 @@ function formatCurrencyWithSpaces(amount: number): string {
     .replace(/\B(?=(\d{3})+(?!\d))/g, " ")
 }
 
+const translations = {
+  fr: {
+    title: "Enregistrer un paiement",
+    description: "Entrez les détails du paiement pour réduire le solde courant",
+    totalAmount: "MONTANT TOTAL",
+    person: "Personne",
+    date: "Date",
+    amount: "Montant",
+    comment: "Commentaire",
+    commentPlaceholder: "Détails optionnels du paiement",
+    notePayment: "Note: Ce paiement de",
+    willBeDeducted: "sera déduit du",
+    willBeApplied: "sera appliqué au",
+    runningBalance: "solde courant",
+    signature: "Signature",
+    cancel: "Annuler",
+    savePayment: "Enregistrer le paiement",
+  },
+  en: {
+    title: "Record Payment",
+    description: "Enter payment details to reduce the running balance",
+    totalAmount: "TOTAL AMOUNT",
+    person: "Person",
+    date: "Date",
+    amount: "Amount",
+    comment: "Comment",
+    commentPlaceholder: "Optional payment details",
+    notePayment: "Note: This payment of",
+    willBeDeducted: "will be deducted from the",
+    willBeApplied: "will be applied to the",
+    runningBalance: "running balance",
+    signature: "Signature",
+    cancel: "Cancel",
+    savePayment: "Save Payment",
+  },
+}
+
 // Update the props interface to make transaction optional
 interface EditTransactionDialogProps {
   person: Person
@@ -42,6 +79,7 @@ interface EditTransactionDialogProps {
     signature?: string,
   ) => void
   viewMode: "they-owe-me" | "i-owe-them"
+  language?: "fr" | "en"
 }
 
 export function EditTransactionDialog({
@@ -51,7 +89,9 @@ export function EditTransactionDialog({
   onClose,
   onUpdate,
   viewMode,
+  language = "fr",
 }: EditTransactionDialogProps) {
+  const t = translations[language]
   // Initialize amount state with 0
   const [amount, setAmount] = useState<number>(0)
 
@@ -114,12 +154,12 @@ export function EditTransactionDialog({
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Record Payment</DialogTitle>
-          <DialogDescription>Enter payment details to reduce the running balance</DialogDescription>
+          <DialogTitle>{t.title}</DialogTitle>
+          <DialogDescription>{t.description}</DialogDescription>
         </DialogHeader>
         <div className="mb-4 pb-2 border-b">
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">MONTANT TOTAL</span>
+            <span className="text-gray-500">{t.totalAmount}</span>
             <span className={`${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"} font-medium`}>
               {viewMode === "they-owe-me" ? "+" : "-"} FCFA {formattedTotalAmount}
             </span>
@@ -129,13 +169,13 @@ export function EditTransactionDialog({
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="person" className="text-right">
-                Person
+                {t.person}
               </Label>
               <Input id="person" value={person.name} disabled className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="date" className="text-right">
-                Date
+                {t.date}
               </Label>
               <Input
                 id="date"
@@ -147,7 +187,7 @@ export function EditTransactionDialog({
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="amount" className="text-right">
-                Amount
+                {t.amount}
               </Label>
               <div className="col-span-3 flex items-center">
                 <span className="mr-2">FCFA</span>
@@ -164,7 +204,7 @@ export function EditTransactionDialog({
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="comment" className="text-right">
-                Comment
+                {t.comment}
               </Label>
               <Textarea
                 id="comment"
@@ -172,34 +212,34 @@ export function EditTransactionDialog({
                 onChange={(e) => setComment(e.target.value)}
                 className="col-span-3"
                 rows={3}
-                placeholder="Optional payment details"
+                placeholder={t.commentPlaceholder}
               />
             </div>
 
             {/* Update the note text to be clearer about what's happening */}
             <div className="grid grid-cols-4 items-center gap-4">
               <div className="col-span-4 text-sm text-muted-foreground text-center">
-                Note: This payment of {viewMode === "they-owe-me" ? "-" : "+"} FCFA {displayAmount || "0"} will be
-                {viewMode === "they-owe-me" ? " deducted from" : " applied to"} the running balance
+                {t.notePayment} {viewMode === "they-owe-me" ? "-" : "+"} FCFA {displayAmount || "0"}{" "}
+                {viewMode === "they-owe-me" ? t.willBeDeducted : t.willBeApplied} {t.runningBalance}
               </div>
             </div>
 
             {/* Show signature for both views */}
             <div className="grid grid-cols-4 items-start gap-4">
               <Label htmlFor="signature" className="text-right pt-2">
-                Signature
+                {t.signature}
               </Label>
               <div className="col-span-3">
-                <SignatureCapture initialSignature={signature} onSignatureCapture={setSignature} />
+                <SignatureCapture initialSignature={signature} onSignatureCapture={setSignature} language={language} />
               </div>
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {t.cancel}
             </Button>
             <Button type="submit" disabled={!isButtonEnabled}>
-              Enregistrer le paiement
+              {t.savePayment}
             </Button>
           </DialogFooter>
         </form>

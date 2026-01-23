@@ -21,6 +21,40 @@ interface TransactionReceiptProps {
   isSettlement?: boolean
   viewMode: "they-owe-me" | "i-owe-them"
   paymentAmount?: number
+  language?: "fr" | "en"
+}
+
+const translations = {
+  fr: {
+    transactionDetails: "Détails de la transaction et informations du reçu",
+    receipt: "Reçu",
+    person: "Personne:",
+    description: "Description:",
+    comment: "Commentaire:",
+    action: "Action:",
+    accountSettlement: "Règlement du compte",
+    settledAmount: "Montant réglé:",
+    amount: "Montant:",
+    newBalance: "Nouveau solde:",
+    signature: "Signature:",
+    thankYou: "Merci d'utiliser l'application Fund Management",
+    close: "Fermer",
+  },
+  en: {
+    transactionDetails: "Transaction details and receipt information",
+    receipt: "Receipt",
+    person: "Person:",
+    description: "Description:",
+    comment: "Comment:",
+    action: "Action:",
+    accountSettlement: "Account Settlement",
+    settledAmount: "Settled Amount:",
+    amount: "Amount:",
+    newBalance: "New Balance:",
+    signature: "Signature:",
+    thankYou: "Thank you for using Fund Management App",
+    close: "Close",
+  },
 }
 
 // Helper function to format currency with spaces
@@ -39,7 +73,9 @@ export function TransactionReceipt({
   isSettlement = false,
   viewMode,
   paymentAmount,
+  language = "fr",
 }: TransactionReceiptProps) {
+  const t = translations[language]
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split("T")[0]
 
@@ -91,32 +127,32 @@ export function TransactionReceipt({
             <CheckCircle2 className="h-5 w-5 text-green-500" />
             {title}
           </DialogTitle>
-          <DialogDescription>Transaction details and receipt information</DialogDescription>
+          <DialogDescription>{t.transactionDetails}</DialogDescription>
         </DialogHeader>
 
         <div className="py-4 space-y-4">
           <div className="bg-muted/30 p-4 rounded-lg border">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-medium">Receipt</h3>
+              <h3 className="font-medium">{t.receipt}</h3>
               <span className="text-sm text-muted-foreground">{today}</span>
             </div>
 
             <div className="space-y-3 mt-4">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Person:</span>
+                <span className="text-muted-foreground">{t.person}</span>
                 <span className="font-medium">{person.name}</span>
               </div>
 
               {transaction && (
                 <>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Description:</span>
+                    <span className="text-muted-foreground">{t.description}</span>
                     <span>{transaction.description}</span>
                   </div>
 
                   {transaction.comment && (
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Comment:</span>
+                      <span className="text-muted-foreground">{t.comment}</span>
                       <span className="text-right max-w-[200px]">{transaction.comment}</span>
                     </div>
                   )}
@@ -125,14 +161,14 @@ export function TransactionReceipt({
 
               {isSettlement && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Action:</span>
-                  <span>Account Settlement</span>
+                  <span className="text-muted-foreground">{t.action}</span>
+                  <span>{t.accountSettlement}</span>
                 </div>
               )}
 
               <div className="border-t pt-3 mt-3">
                 <div className="flex justify-between font-medium">
-                  <span>{isSettlement ? "Settled Amount:" : "Amount:"}</span>
+                  <span>{isSettlement ? t.settledAmount : t.amount}</span>
                   <span
                     className={
                       isPaymentTransaction || isSettlement
@@ -158,7 +194,7 @@ export function TransactionReceipt({
 
                 {isSettlement && (
                   <div className="flex justify-between font-medium mt-2">
-                    <span>New Balance:</span>
+                    <span>{t.newBalance}</span>
                     <span className="text-green-500">FCFA 0</span>
                   </div>
                 )}
@@ -168,7 +204,7 @@ export function TransactionReceipt({
             {/* Add signature display */}
             {(person.signature || (transaction && transaction.signature)) && (
               <div className="mt-4 border-t pt-4">
-                <div className="text-muted-foreground mb-2">Signature:</div>
+                <div className="text-muted-foreground mb-2">{t.signature}</div>
                 <div className="border rounded-md p-2 bg-white">
                   <img
                     src={transaction?.signature || person.signature}
@@ -180,11 +216,11 @@ export function TransactionReceipt({
             )}
           </div>
 
-          <div className="text-center text-sm text-muted-foreground">Thank you for using Fund Management App</div>
+          <div className="text-center text-sm text-muted-foreground">{t.thankYou}</div>
         </div>
 
         <DialogFooter>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{t.close}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

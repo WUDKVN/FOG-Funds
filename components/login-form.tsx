@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,6 +19,21 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+
+  // Load saved credentials on mount
+  useEffect(() => {
+    const savedCredentials = localStorage.getItem("savedCredentials")
+    if (savedCredentials) {
+      try {
+        const { username: savedUsername, password: savedPassword } = JSON.parse(savedCredentials)
+        setUsername(savedUsername || "")
+        setPassword(savedPassword || "")
+        setRememberMe(true)
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  }, [])
 
   // Validate username: only letters and numbers
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,17 +63,21 @@ export function LoginForm() {
         return
       }
 
-      // Store the logged in user info
+      // Store user info with remember me preference
       const userData = { ...data.user, rememberMe }
       
       if (rememberMe) {
-        // Use localStorage for persistent login (survives browser close)
+        // Save credentials for next login
+        localStorage.setItem("savedCredentials", JSON.stringify({ username, password }))
+        // Use localStorage for persistent storage (survives browser close)
         localStorage.setItem("loggedInUser", JSON.stringify(userData))
-        sessionStorage.removeItem("loggedInUser")
+        localStorage.setItem("rememberMe", "true")
       } else {
-        // Use sessionStorage for session-only login (cleared when browser closes)
+        // Remove saved credentials
+        localStorage.removeItem("savedCredentials")
+        // Use sessionStorage for session-only storage (cleared when browser closes)
         sessionStorage.setItem("loggedInUser", JSON.stringify(userData))
-        localStorage.removeItem("loggedInUser")
+        localStorage.removeItem("rememberMe")
       }
 
       router.push("/")

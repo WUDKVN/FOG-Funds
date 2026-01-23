@@ -15,16 +15,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Helper to get user from storage
-  const getStoredUser = useCallback(() => {
-    const localUser = localStorage.getItem("loggedInUser")
-    const sessionUser = sessionStorage.getItem("loggedInUser")
-    return localUser || sessionUser
-  }, [])
-
   // Log logout to database
   const logLogout = useCallback(async () => {
-    const storedUser = getStoredUser()
+    const storedUser = localStorage.getItem("loggedInUser") || sessionStorage.getItem("loggedInUser")
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser)
@@ -42,7 +35,7 @@ export default function Home() {
         console.error("Error logging logout:", error)
       }
     }
-  }, [getStoredUser])
+  }, [])
 
   const handleLogout = useCallback(async () => {
     await logLogout()
@@ -62,15 +55,18 @@ export default function Home() {
   }, [handleLogout])
 
   useEffect(() => {
-    // Check if user is logged in (check both storage types)
-    const user = getStoredUser()
+    // Check if user is logged in (check both localStorage and sessionStorage)
+    const localUser = localStorage.getItem("loggedInUser")
+    const sessionUser = sessionStorage.getItem("loggedInUser")
+    const user = localUser || sessionUser
+    
     if (!user) {
       router.push("/login")
     } else {
       setIsAuthenticated(true)
     }
     setIsLoading(false)
-  }, [router, getStoredUser])
+  }, [router])
 
   // Security: Auto logout on inactivity (3 minutes)
   useEffect(() => {
@@ -102,31 +98,33 @@ export default function Home() {
   // Security: Auto logout when user closes the page (only if not "remember me")
   useEffect(() => {
     const handleBeforeUnload = () => {
-      // Check if remember me is enabled
-      const localUser = localStorage.getItem("loggedInUser")
-      const sessionUser = sessionStorage.getItem("loggedInUser")
-      const storedUser = localUser || sessionUser
+      const rememberMe = localStorage.getItem("rememberMe")
       
+      // If remember me is enabled, don't logout on page close
+      if (rememberMe === "true") {
+        return
+      }
+      
+      // Use sendBeacon for reliable logout logging when page closes
+      const storedUser = localStorage.getItem("loggedInUser") || sessionStorage.getItem("loggedInUser")
       if (storedUser) {
         try {
           const user = JSON.parse(storedUser)
-          // Only log out if rememberMe is false (sessionStorage user)
-          if (!user.rememberMe) {
-            navigator.sendBeacon(
-              "/api/logs",
-              JSON.stringify({
-                userId: user.id,
-                userName: user.name,
-                userEmail: user.name,
-                action: "logout",
-              })
-            )
-            sessionStorage.removeItem("loggedInUser")
-          }
+          navigator.sendBeacon(
+            "/api/logs",
+            JSON.stringify({
+              userId: user.id,
+              userName: user.name,
+              userEmail: user.name,
+              action: "logout",
+            })
+          )
         } catch {
           // Ignore errors during unload
         }
       }
+      localStorage.removeItem("loggedInUser")
+      sessionStorage.removeItem("loggedInUser")
     }
 
     window.addEventListener("beforeunload", handleBeforeUnload)
