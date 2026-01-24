@@ -80,7 +80,14 @@ export function LoginForm() {
         localStorage.removeItem("rememberMe")
       }
 
-      router.push("/")
+      // Check if there's a saved location to return to
+      const lastLocation = localStorage.getItem("lastLocation")
+      if (lastLocation && lastLocation !== "/login") {
+        localStorage.removeItem("lastLocation")
+        router.push(lastLocation)
+      } else {
+        router.push("/")
+      }
     } catch (err) {
       console.error("Login error:", err)
       setError("Erreur de connexion. Veuillez réessayer.")

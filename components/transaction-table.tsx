@@ -14,9 +14,27 @@ import { SettleConfirmDialog } from "@/components/settle-confirm-dialog"
 import { useToast } from "@/hooks/use-toast"
 import type { Person, Transaction, ActivityLog, LoginLog } from "@/lib/types"
 import { LogsDialog } from "@/components/logs-dialog"
-import { initialPeople } from "@/lib/data"
 import { TransactionReceipt } from "@/components/transaction-receipt"
 import { HistoryDialog } from "@/components/history-dialog"
+
+const initialPeople: Person[] = [
+  {
+    id: "p1",
+    name: "John Doe",
+    transactions: [
+      {
+        id: "t1",
+        date: "2023-10-01",
+        description: "Transaction 1",
+        amount: 1000,
+        comment: "Comment 1",
+        settled: false,
+        signature: "Signature 1",
+      },
+    ],
+    signature: "Signature Doe",
+  },
+]
 
 type FilterType = "all" | "they-owe" | "i-owe"
 type ViewMode = "they-owe-me" | "i-owe-them"
@@ -83,7 +101,8 @@ export function formatCurrency(amount: number): string {
 }
 
 export function TransactionTable() {
-  const [people, setPeople] = useState<Person[]>(initialPeople)
+  const [people, setPeople] = useState<Person[]>([])
+  const [isLoadingData, setIsLoadingData] = useState(true)
   const [filteredPeople, setFilteredPeople] = useState<Person[]>([])
   const [expandedPerson, setExpandedPerson] = useState<string | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<{
@@ -154,8 +173,47 @@ export function TransactionTable() {
           // Use default user if parsing fails
         }
       }
+
+      // Restore saved table state after re-login
+      const savedState = localStorage.getItem("tableState")
+      if (savedState) {
+        try {
+          const state = JSON.parse(savedState)
+          if (state.viewMode) setViewMode(state.viewMode)
+          if (state.language) setLanguage(state.language)
+          if (state.expandedPerson) setExpandedPerson(state.expandedPerson)
+          if (state.searchQuery) setSearchQuery(state.searchQuery)
+          if (state.monthFilter) setMonthFilter(state.monthFilter)
+          if (state.statusFilter) setStatusFilter(state.statusFilter)
+          localStorage.removeItem("tableState")
+        } catch {
+          // Ignore parse errors
+        }
+      }
     }
   }, [])
+
+  // Add state for receipt
+  const [receiptData, setReceiptData] = useState<{
+    open: boolean
+    title: string
+    person: Person
+    transaction?: Transaction
+    isSettlement?: boolean
+    paymentAmount?: number
+  }>({
+    open: false,
+    title: "",
+    person: people[0],
+    isSettlement: false,
+  })
+
+  // Add state for view mode
+  const [viewMode, setViewMode] = useState<ViewMode>("they-owe-me")
+
+  // Add state for settled message
+  const [showSettledMessage, setShowSettledMessage] = useState(false)
+  const [recentlySettledPerson, setRecentlySettledPerson] = useState<string | null>(null)
 
   // Helper function to add activity log - saves to database
   const addActivityLog = async (
@@ -224,28 +282,6 @@ export function TransactionTable() {
 
   // Get translations based on current language
   const t = translations[language]
-
-  // Add state for receipt
-  const [receiptData, setReceiptData] = useState<{
-    open: boolean
-    title: string
-    person: Person
-    transaction?: Transaction
-    isSettlement?: boolean
-    paymentAmount?: number
-  }>({
-    open: false,
-    title: "",
-    person: people[0],
-    isSettlement: false,
-  })
-
-  // Add state for view mode
-  const [viewMode, setViewMode] = useState<ViewMode>("they-owe-me")
-
-  // Add state for settled message
-  const [showSettledMessage, setShowSettledMessage] = useState(false)
-  const [recentlySettledPerson, setRecentlySettledPerson] = useState<string | null>(null)
 
   // Check for zero balances and auto-settle them
   useEffect(() => {
@@ -806,6 +842,43 @@ export function TransactionTable() {
     setLanguage(language === "fr" ? "en" : "fr")
   }
 
+  // Save table state before logout (triggered by storage event)
+  const handleStorageChange = (e: StorageEvent) => {
+    if (e.key === "lastLocation" && e.newValue) {
+      saveTableState()
+    }
+  }
+
+  const saveTableState = () => {
+    const state = {
+      viewMode,
+      language,
+      expandedPerson,
+      searchQuery,
+      monthFilter,
+      statusFilter,
+    }
+    localStorage.setItem("tableState", JSON.stringify(state))
+  }
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", handleStorageChange)
+      
+      // Also save periodically to handle same-tab logout
+      const interval = setInterval(() => {
+        if (localStorage.getItem("lastLocation")) {
+          saveTableState()
+        }
+      }, 500)
+
+      return () => {
+        window.removeEventListener("storage", handleStorageChange)
+        clearInterval(interval)
+      }
+    }
+  }, [viewMode, language, expandedPerson, searchQuery, monthFilter, statusFilter])
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4">
@@ -908,18 +981,18 @@ export function TransactionTable() {
                   // Calculate the total amount for all transactions for this person
                   const totalAmount = calculateTotalAmount(person)
 
-// Check if person has overdue transactions
-                                  const personIsOverdue = isPersonOverdue(person)
+                  // Check if person has overdue transactions
+                  const personIsOverdue = isPersonOverdue(person)
 
-                                  return (
-                                    <>
-                                      <TableRow key={`row-${person.id}`} className={personIsOverdue ? "bg-red-50" : ""}>
-                                        <TableCell className={`font-medium ${personIsOverdue ? "text-red-600" : ""}`}>
-                                          {person.name}
-                                          {personIsOverdue && (
-                                            <span className="ml-2 text-xs text-red-500 font-normal">({t.overdue})</span>
-                                          )}
-                                        </TableCell>
+                  return (
+                    <>
+                      <TableRow key={`row-${person.id}`} className={personIsOverdue ? "bg-red-50" : ""}>
+                        <TableCell className={`font-medium ${personIsOverdue ? "text-red-600" : ""}`}>
+                          {person.name}
+                          {personIsOverdue && (
+                            <span className="ml-2 text-xs text-red-500 font-normal">({t.overdue})</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
                             <span className={`text-sm sm:text-base whitespace-nowrap ${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"}`}>

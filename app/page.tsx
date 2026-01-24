@@ -37,7 +37,11 @@ export default function Home() {
     }
   }, [])
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = useCallback(async (saveState = true) => {
+    // Save the current URL/state so user can return after re-login
+    if (saveState) {
+      localStorage.setItem("lastLocation", window.location.pathname + window.location.search)
+    }
     await logLogout()
     localStorage.removeItem("loggedInUser")
     sessionStorage.removeItem("loggedInUser")
@@ -159,7 +163,7 @@ export default function Home() {
           />
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Fund Management</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={handleLogout}>
+        <Button variant="outline" size="sm" onClick={() => handleLogout(false)}>
           <LogOut className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Deconnexion</span>
         </Button>
