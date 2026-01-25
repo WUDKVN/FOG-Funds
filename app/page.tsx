@@ -7,7 +7,7 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { LogOut } from "lucide-react"
 
-const INACTIVITY_TIMEOUT = 7 * 1000 // 7 seconds in milliseconds
+const INACTIVITY_TIMEOUT = 20 * 60 * 1000 // 20 minutes in milliseconds
 
 export default function Home() {
   const router = useRouter()
