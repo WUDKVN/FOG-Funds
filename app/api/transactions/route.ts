@@ -1,11 +1,23 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
 
-const sql = neon(process.env.DATABASE_URL!)
+function getSql() {
+  return neon(process.env.DATABASE_URL!)
+}
 
 // GET - Fetch all transactions
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get("userId")
+
+    if (!userId) {
+      return NextResponse.json({ error: "User ID required" }, { status: 400 })
+    }
+
+    const sql = getSql()
+    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
+
     const transactions = await sql`
       SELECT 
         fm_txn_id as id,
@@ -21,6 +33,7 @@ export async function GET() {
         fm_txn_is_payment as "isPayment",
         fm_txn_created_at as "createdAt"
       FROM fm_transactions
+      WHERE fm_txn_user_id = ${userId}::uuid
       ORDER BY fm_txn_date DESC
     `
 
@@ -35,11 +48,19 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { personId, description, amount, date, dueDate, comment, settled, signature, type, isPayment } = body
+    const { personId, description, amount, date, dueDate, comment, settled, signature, type, isPayment, userId } = body
+
+    if (!userId) {
+      return NextResponse.json({ error: "User ID required" }, { status: 400 })
+    }
+
+    const sql = getSql()
+    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
 
     const result = await sql`
       INSERT INTO fm_transactions (
         fm_txn_id,
+        fm_txn_user_id,
         fm_txn_person_id,
         fm_txn_description,
         fm_txn_amount,
@@ -56,6 +77,7 @@ export async function POST(request: Request) {
         fm_txn_updated_at
       ) VALUES (
         gen_random_uuid(),
+        ${userId}::uuid,
         ${personId},
         ${description},
         ${amount},
@@ -85,7 +107,14 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const { transactionId, personId, paymentAmount, description, date, comment, settled, signature, type, isPayment } = body
+    const { transactionId, personId, paymentAmount, description, date, comment, settled, signature, type, isPayment, userId } = body
+
+    if (!userId) {
+      return NextResponse.json({ error: "User ID required" }, { status: 400 })
+    }
+
+    const sql = getSql()
+    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
 
     if (transactionId) {
       // Update existing transaction
@@ -96,6 +125,7 @@ export async function PUT(request: Request) {
           fm_txn_is_settled = ${settled || false},
           fm_txn_updated_at = NOW()
         WHERE fm_txn_id = ${transactionId}
+        AND fm_txn_user_id = ${userId}::uuid
       `
       return NextResponse.json({ success: true })
     } else {
@@ -103,6 +133,7 @@ export async function PUT(request: Request) {
       const result = await sql`
         INSERT INTO fm_transactions (
           fm_txn_id,
+          fm_txn_user_id,
           fm_txn_person_id,
           fm_txn_description,
           fm_txn_amount,
@@ -118,6 +149,7 @@ export async function PUT(request: Request) {
           fm_txn_updated_at
         ) VALUES (
           gen_random_uuid(),
+          ${userId}::uuid,
           ${personId},
           ${description || 'Payment'},
           ${-Math.abs(paymentAmount)},
@@ -147,16 +179,24 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const personId = searchParams.get("personId")
+    const userId = searchParams.get("userId")
 
     if (!personId) {
       return NextResponse.json({ error: "Person ID required" }, { status: 400 })
     }
 
-    // Delete all transactions for this person
-    await sql`DELETE FROM fm_transactions WHERE fm_txn_person_id = ${personId}`
+    if (!userId) {
+      return NextResponse.json({ error: "User ID required" }, { status: 400 })
+    }
+
+    const sql = getSql()
+    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
+
+    // Delete all transactions for this person owned by this user
+    await sql`DELETE FROM fm_transactions WHERE fm_txn_person_id = ${personId} AND fm_txn_user_id = ${userId}::uuid`
     
-    // Delete the person
-    await sql`DELETE FROM fm_persons WHERE fm_person_id = ${personId}`
+    // Delete the person owned by this user
+    await sql`DELETE FROM fm_persons WHERE fm_person_id = ${personId} AND fm_person_user_id = ${userId}::uuid`
 
     return NextResponse.json({ success: true })
   } catch (error) {
