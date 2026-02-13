@@ -1,11 +1,22 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
 
-const sql = neon(process.env.DATABASE_URL!)
+function getSql() {
+  return neon(process.env.DATABASE_URL!)
+}
 
 // GET - Fetch activity logs from database
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get("userId")
+
+    const sql = getSql()
+
+    if (userId) {
+      await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
+    }
+
     const logs = await sql`
       SELECT 
         fm_activity_id as id,

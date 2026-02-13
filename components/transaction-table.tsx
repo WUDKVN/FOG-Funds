@@ -128,10 +128,12 @@ export function TransactionTable() {
   const isAdmin = currentUser.role === "admin"
 
   // Fetch persons and transactions from database
-  const fetchPersonsFromDB = async () => {
+  const fetchPersonsFromDB = async (userIdOverride?: string) => {
     try {
+      const uid = userIdOverride || currentUser.id
+      if (!uid || uid === "user1") return // Don't fetch without a real user ID
       setIsLoadingData(true)
-      const response = await fetch("/api/persons")
+      const response = await fetch(`/api/persons?userId=${uid}`)
       const data = await response.json()
       if (data.persons) {
         // Transform data to match the expected format
@@ -163,15 +165,17 @@ export function TransactionTable() {
 
   // Load data from database on mount and refresh periodically
   useEffect(() => {
-    fetchPersonsFromDB()
-    
-    // Refresh data every 5 seconds for real-time sync
-    const interval = setInterval(() => {
+    if (currentUser.id && currentUser.id !== "user1") {
       fetchPersonsFromDB()
-    }, 5000)
+      
+      // Refresh data every 5 seconds for real-time sync
+      const interval = setInterval(() => {
+        fetchPersonsFromDB()
+      }, 5000)
 
-    return () => clearInterval(interval)
-  }, [])
+      return () => clearInterval(interval)
+    }
+  }, [currentUser.id])
 
   // Load user from localStorage or sessionStorage on mount
   useEffect(() => {
@@ -285,7 +289,7 @@ export function TransactionTable() {
   // Fetch activity logs from database
   const fetchActivityLogs = async () => {
     try {
-      const response = await fetch("/api/activity")
+      const response = await fetch(`/api/activity?userId=${currentUser.id}`)
       const data = await response.json()
       if (data.logs) {
         setActivityLogs(data.logs)
@@ -297,15 +301,17 @@ export function TransactionTable() {
 
   // Load activity logs on mount and auto-refresh every 3 seconds for real-time sync
   useEffect(() => {
-    fetchActivityLogs()
-    
-    // Auto-refresh every 3 seconds for real-time sync between users
-    const interval = setInterval(() => {
+    if (currentUser.id && currentUser.id !== "user1") {
       fetchActivityLogs()
-    }, 3000)
+      
+      // Auto-refresh every 3 seconds for real-time sync between users
+      const interval = setInterval(() => {
+        fetchActivityLogs()
+      }, 3000)
 
-    return () => clearInterval(interval)
-  }, [])
+      return () => clearInterval(interval)
+    }
+  }, [currentUser.id])
 
   // Get translations based on current language
   const t = translations[language]
@@ -453,6 +459,7 @@ export function TransactionTable() {
           signature,
           type: viewMode,
           isPayment: true,
+          userId: currentUser.id,
         }),
       })
       const data = await response.json()
@@ -551,7 +558,7 @@ export function TransactionTable() {
       const personResponse = await fetch("/api/persons", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: personName, signature }),
+        body: JSON.stringify({ name: personName, signature, userId: currentUser.id }),
       })
       const personData = await personResponse.json()
       const personId = personData.id
@@ -571,6 +578,7 @@ export function TransactionTable() {
           signature,
           type: viewMode,
           isPayment: false,
+          userId: currentUser.id,
         }),
       })
       const txnData = await txnResponse.json()
