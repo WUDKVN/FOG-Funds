@@ -312,60 +312,6 @@ export function TransactionTable() {
   // Get translations based on current language
   const t = translations[language]
 
-  // Check for zero balances and auto-settle them
-  useEffect(() => {
-    let hasChanges = false
-
-    const updatedPeople = people.map((person) => {
-      // Calculate total for this person in the current view mode
-      let total = 0
-
-      // Only consider transactions that match the current view mode
-      const relevantTransactions = person.transactions.filter((t) =>
-        viewMode === "they-owe-me" ? t.amount > 0 : t.amount < 0,
-      )
-
-      // Calculate total
-      for (const t of person.transactions) {
-        if (viewMode === "they-owe-me") {
-          total += t.amount
-        } else {
-          total += t.amount
-        }
-      }
-
-      // If total is very close to 0 but there are unsettled transactions
-      if (Math.abs(total) < 0.01 && relevantTransactions.some((t) => !t.settled)) {
-        hasChanges = true
-
-        // Mark all relevant transactions as settled
-        const updatedTransactions = person.transactions.map((transaction) => {
-          if ((viewMode === "they-owe-me" ? transaction.amount > 0 : transaction.amount < 0) && !transaction.settled) {
-            return {
-              ...transaction,
-              originalAmount: transaction.amount,
-              amount: 0,
-              settled: true,
-              settlementDate: new Date().toISOString().split("T")[0], // Add settlement date
-            }
-          }
-          return transaction
-        })
-
-        return {
-          ...person,
-          transactions: updatedTransactions,
-        }
-      }
-
-      return person
-    })
-
-    if (hasChanges) {
-      setPeople(updatedPeople)
-    }
-  }, [people, viewMode])
-
   // Apply filters and search based on view mode, month, and status
   useEffect(() => {
     // First filter by view mode
@@ -579,7 +525,10 @@ export function TransactionTable() {
       })
       const txnData = await txnResponse.json()
 
-      // Create local transaction object for UI
+      // Refresh from database to get the canonical data for all users
+      await fetchPersonsFromDB()
+
+      // Create local transaction object for receipt display
       const newTransaction: Transaction = {
         id: txnData.id,
         date,
@@ -591,26 +540,12 @@ export function TransactionTable() {
         dueDate,
       }
 
-      // Check if person already exists locally
-      const existingPerson = people.find((p) => p.name.toLowerCase() === personName.toLowerCase())
-      let updatedPerson: Person
-
-      if (existingPerson) {
-        updatedPerson = {
-          ...existingPerson,
-          transactions: [...existingPerson.transactions, newTransaction],
-          signature: signature || existingPerson.signature,
-        }
-        setPeople(people.map((person) => (person.id === existingPerson.id ? updatedPerson : person)))
-      } else {
-        // Create new person locally
-        updatedPerson = {
-          id: personId,
-          name: personName,
-          transactions: [newTransaction],
-          signature,
-        }
-        setPeople([...people, updatedPerson])
+      // Find the person for the receipt
+      const updatedPerson: Person = {
+        id: personId,
+        name: personName,
+        transactions: [newTransaction],
+        signature,
       }
 
       // Show receipt
@@ -630,8 +565,6 @@ export function TransactionTable() {
         Math.abs(signedAmount),
       )
 
-      // Refresh data from database to ensure sync
-      await fetchPersonsFromDB()
     } catch (error) {
       console.error("Error adding transaction:", error)
       toast({
@@ -652,7 +585,7 @@ export function TransactionTable() {
   }
 
   // Add a new function to handle confirmation
-  const handleSettleConfirmation = () => {
+  const handleSettleConfirmation = async () => {
     // Close confirmation dialog
     setIsConfirmationOpen(false)
 
@@ -660,37 +593,35 @@ export function TransactionTable() {
 
     // Store the person's name before settlement for the success message
     const personName = soldOutPerson.name
+    const totalAmount = calculateTotalAmount(soldOutPerson)
 
-    // Mark all transactions as settled
-    setPeople(
-      people.map((person) => {
-        if (person.id === soldOutPerson.id) {
-          // Mark all transactions as settled
-          const updatedTransactions = person.transactions.map((transaction) => {
-            // Only update transactions that match the current view mode
-            if (
-              (viewMode === "they-owe-me" && transaction.amount > 0) ||
-              (viewMode === "i-owe-them" && transaction.amount < 0)
-            ) {
-              return {
-                ...transaction,
-                originalAmount: transaction.amount, // Store original amount
-                amount: 0, // Set amount to 0 to indicate fully paid
-                settled: true, // Mark as settled
-                settlementDate: new Date().toISOString().split("T")[0], // Add settlement date
-              }
-            }
-            return transaction
+    try {
+      // Settle all matching transactions in the database
+      const settlePromises = soldOutPerson.transactions
+        .filter((t) =>
+          (viewMode === "they-owe-me" && t.amount > 0) ||
+          (viewMode === "i-owe-them" && t.amount < 0)
+        )
+        .map((t) =>
+          fetch("/api/transactions", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transactionId: t.id,
+              paymentAmount: Math.abs(t.amount),
+              settled: true,
+              userId: currentUser.id,
+            }),
           })
+        )
 
-          return {
-            ...person,
-            transactions: updatedTransactions,
-          }
-        }
-        return person
-      }),
-    )
+      await Promise.all(settlePromises)
+
+      // Refresh from database to ensure sync
+      await fetchPersonsFromDB()
+    } catch (error) {
+      console.error("Error settling transactions:", error)
+    }
 
     // Close any expanded person to prevent referencing a person that might disappear from the filtered list
     setExpandedPerson(null)
@@ -708,7 +639,6 @@ export function TransactionTable() {
     setShowSettledMessage(true)
 
     // Log the activity
-    const totalAmount = calculateTotalAmount(soldOutPerson)
     addActivityLog(
       "settle",
       `${currentUser.name} a soldé le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}).`,
@@ -799,70 +729,47 @@ export function TransactionTable() {
   }
 
   // Function to toggle a transaction's settled status (for "unsettle" functionality)
-  const toggleTransactionSettled = (personId: string, transactionId: string) => {
+  const toggleTransactionSettled = async (personId: string, transactionId: string) => {
     // Find the person and transaction for logging
     const person = people.find((p) => p.id === personId)
     const transaction = person?.transactions.find((t) => t.id === transactionId)
 
-    setPeople(
-      people.map((p) => {
-        if (p.id === personId) {
-          const updatedTransactions = p.transactions.map((t) => {
-            if (t.id === transactionId) {
-              // If currently settled (amount is 0), restore the original amount
-              if (t.amount === 0) {
-                // Determine the appropriate amount based on view mode
-                const restoredAmount =
-                  viewMode === "they-owe-me"
-                    ? Math.abs(t.originalAmount || 50)
-                    : // Default to 50 if no original amount
-                      -Math.abs(t.originalAmount || 50)
+    if (!transaction) return
 
-                return {
-                  ...t,
-                  amount: restoredAmount,
-                  settled: false,
-                }
-              } else {
-                // If not settled, save the original amount and set to 0
-                return {
-                  ...t,
-                  originalAmount: t.amount, // Store original amount
-                  amount: 0,
-                  settled: true,
-                  settlementDate: new Date().toISOString().split("T")[0], // Add settlement date
-                }
-              }
-            }
-            return t
-          })
+    try {
+      // Persist the change to the database
+      await fetch("/api/transactions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId,
+          paymentAmount: transaction.amount === 0 ? -(transaction.originalAmount || 50) : Math.abs(transaction.amount),
+          settled: transaction.amount !== 0,
+          userId: currentUser.id,
+        }),
+      })
 
-          return {
-            ...p,
-            transactions: updatedTransactions,
-          }
-        }
-        return p
-      }),
-    )
+      // Refresh from database to ensure sync
+      await fetchPersonsFromDB()
+    } catch (error) {
+      console.error("Error toggling settled status:", error)
+    }
 
     // Log the activity
-    if (person && transaction) {
+    if (transaction) {
       const amount = Math.abs(transaction.originalAmount || transaction.amount || 0)
       if (transaction.amount === 0) {
-        // Was settled, now unsettling
         addActivityLog(
           "unsettle",
-          `${currentUser.name} a annulé le règlement de la transaction "${transaction.description}" pour ${person.name} (FCFA ${formatCurrency(amount)}).`,
-          person.name,
+          `${currentUser.name} a annulé le règlement de la transaction "${transaction.description}" pour ${person?.name} (FCFA ${formatCurrency(amount)}).`,
+          person?.name || "",
           amount,
         )
       } else {
-        // Was unsettled, now settling
         addActivityLog(
           "settle",
-          `${currentUser.name} a réglé la transaction "${transaction.description}" pour ${person.name} (FCFA ${formatCurrency(amount)}).`,
-          person.name,
+          `${currentUser.name} a réglé la transaction "${transaction.description}" pour ${person?.name} (FCFA ${formatCurrency(amount)}).`,
+          person?.name || "",
           amount,
         )
       }
