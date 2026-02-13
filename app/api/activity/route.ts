@@ -49,6 +49,12 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { userId, userName, action, category, description, personId, personName, transactionId, amount, currency } = body
 
+    const sql = getSql()
+
+    if (userId) {
+      await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
+    }
+
     await sql`
       INSERT INTO fm_activity_logs (
         fm_activity_user_id,
