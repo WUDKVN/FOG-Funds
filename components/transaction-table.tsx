@@ -152,7 +152,23 @@ export function TransactionTable() {
             isPayment: t.isPayment,
           })),
         }))
-        setPeople(formattedPersons)
+
+        // Auto-cleanup: delete persons whose total balance is 0 from the DB
+        for (const person of formattedPersons) {
+          const total = person.transactions.reduce((sum: number, t: any) => sum + t.amount, 0)
+          if (person.transactions.length > 0 && Math.abs(total) < 0.01) {
+            // Balance is 0 — delete from database silently
+            fetch(`/api/transactions?personId=${person.id}`, { method: "DELETE" }).catch(() => {})
+          }
+        }
+
+        // Only show persons that still have a non-zero balance
+        const activePersons = formattedPersons.filter((person: any) => {
+          const total = person.transactions.reduce((sum: number, t: any) => sum + t.amount, 0)
+          return Math.abs(total) >= 0.01
+        })
+
+        setPeople(activePersons)
       }
     } catch (error) {
       console.error("Error fetching persons:", error)
