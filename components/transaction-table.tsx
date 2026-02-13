@@ -127,13 +127,11 @@ export function TransactionTable() {
   // Check if current user is admin
   const isAdmin = currentUser.role === "admin"
 
-  // Fetch persons and transactions from database
-  const fetchPersonsFromDB = async (userIdOverride?: string) => {
+  // Fetch persons and transactions from database (shared across all users)
+  const fetchPersonsFromDB = async () => {
     try {
-      const uid = userIdOverride || currentUser.id
-      if (!uid || uid === "user1") return // Don't fetch without a real user ID
       setIsLoadingData(true)
-      const response = await fetch(`/api/persons?userId=${uid}`)
+      const response = await fetch("/api/persons")
       const data = await response.json()
       if (data.persons) {
         // Transform data to match the expected format
@@ -165,17 +163,15 @@ export function TransactionTable() {
 
   // Load data from database on mount and refresh periodically
   useEffect(() => {
-    if (currentUser.id && currentUser.id !== "user1") {
+    fetchPersonsFromDB()
+    
+    // Refresh data every 5 seconds for real-time sync
+    const interval = setInterval(() => {
       fetchPersonsFromDB()
-      
-      // Refresh data every 5 seconds for real-time sync
-      const interval = setInterval(() => {
-        fetchPersonsFromDB()
-      }, 5000)
+    }, 5000)
 
-      return () => clearInterval(interval)
-    }
-  }, [currentUser.id])
+    return () => clearInterval(interval)
+  }, [])
 
   // Load user from localStorage or sessionStorage on mount
   useEffect(() => {
@@ -289,7 +285,7 @@ export function TransactionTable() {
   // Fetch activity logs from database
   const fetchActivityLogs = async () => {
     try {
-      const response = await fetch(`/api/activity?userId=${currentUser.id}`)
+      const response = await fetch(`/api/activity?role=${currentUser.role}`)
       const data = await response.json()
       if (data.logs) {
         setActivityLogs(data.logs)
@@ -299,76 +295,22 @@ export function TransactionTable() {
     }
   }
 
-  // Load activity logs on mount and auto-refresh every 3 seconds for real-time sync
+  // Load activity logs on mount and auto-refresh every 3 seconds (admin only)
   useEffect(() => {
-    if (currentUser.id && currentUser.id !== "user1") {
+    if (currentUser.role === "admin") {
       fetchActivityLogs()
       
-      // Auto-refresh every 3 seconds for real-time sync between users
+      // Auto-refresh every 3 seconds for real-time sync
       const interval = setInterval(() => {
         fetchActivityLogs()
       }, 3000)
 
       return () => clearInterval(interval)
     }
-  }, [currentUser.id])
+  }, [currentUser.role])
 
   // Get translations based on current language
   const t = translations[language]
-
-  // Check for zero balances and auto-settle them
-  useEffect(() => {
-    let hasChanges = false
-
-    const updatedPeople = people.map((person) => {
-      // Calculate total for this person in the current view mode
-      let total = 0
-
-      // Only consider transactions that match the current view mode
-      const relevantTransactions = person.transactions.filter((t) =>
-        viewMode === "they-owe-me" ? t.amount > 0 : t.amount < 0,
-      )
-
-      // Calculate total
-      for (const t of person.transactions) {
-        if (viewMode === "they-owe-me") {
-          total += t.amount
-        } else {
-          total += t.amount
-        }
-      }
-
-      // If total is very close to 0 but there are unsettled transactions
-      if (Math.abs(total) < 0.01 && relevantTransactions.some((t) => !t.settled)) {
-        hasChanges = true
-
-        // Mark all relevant transactions as settled
-        const updatedTransactions = person.transactions.map((transaction) => {
-          if ((viewMode === "they-owe-me" ? transaction.amount > 0 : transaction.amount < 0) && !transaction.settled) {
-            return {
-              ...transaction,
-              originalAmount: transaction.amount,
-              amount: 0,
-              settled: true,
-              settlementDate: new Date().toISOString().split("T")[0], // Add settlement date
-            }
-          }
-          return transaction
-        })
-
-        return {
-          ...person,
-          transactions: updatedTransactions,
-        }
-      }
-
-      return person
-    })
-
-    if (hasChanges) {
-      setPeople(updatedPeople)
-    }
-  }, [people, viewMode])
 
   // Apply filters and search based on view mode, month, and status
   useEffect(() => {
@@ -488,8 +430,20 @@ export function TransactionTable() {
         paymentAmount: updatedAmount,
       })
 
-      // If account was settled, show success message
+      // Log the activity
       if (willBeSettled) {
+        addActivityLog(
+          "payment",
+          `${currentUser.name} a enregistré un paiement de FCFA ${formatCurrency(updatedAmount)} pour ${person.name} et a soldé le compte. Toutes les transactions ont été supprimées.`,
+          person.name,
+          updatedAmount,
+        )
+
+        // If fully settled, delete the person and all their transactions from the DB
+        await fetch(`/api/transactions?personId=${personId}`, {
+          method: "DELETE",
+        })
+
         setRecentlySettledPerson(person.name)
         setShowSettledMessage(true)
 
@@ -497,19 +451,9 @@ export function TransactionTable() {
           setShowSettledMessage(false)
           setRecentlySettledPerson(null)
         }, 5000)
-      }
 
-      // Expand the person details
-      setExpandedPerson(personId)
-
-      // Log the activity
-      if (willBeSettled) {
-        addActivityLog(
-          "payment",
-          `${currentUser.name} a enregistré un paiement de FCFA ${formatCurrency(updatedAmount)} pour ${person.name} et a soldé le compte.`,
-          person.name,
-          updatedAmount,
-        )
+        // Close expanded since the person will be gone
+        setExpandedPerson(null)
       } else {
         addActivityLog(
           "payment",
@@ -517,6 +461,9 @@ export function TransactionTable() {
           person.name,
           updatedAmount,
         )
+
+        // Expand the person details
+        setExpandedPerson(personId)
       }
 
       // Refresh data from database to ensure sync
@@ -583,7 +530,10 @@ export function TransactionTable() {
       })
       const txnData = await txnResponse.json()
 
-      // Create local transaction object for UI
+      // Refresh from database to get the canonical data for all users
+      await fetchPersonsFromDB()
+
+      // Create local transaction object for receipt display
       const newTransaction: Transaction = {
         id: txnData.id,
         date,
@@ -595,26 +545,12 @@ export function TransactionTable() {
         dueDate,
       }
 
-      // Check if person already exists locally
-      const existingPerson = people.find((p) => p.name.toLowerCase() === personName.toLowerCase())
-      let updatedPerson: Person
-
-      if (existingPerson) {
-        updatedPerson = {
-          ...existingPerson,
-          transactions: [...existingPerson.transactions, newTransaction],
-          signature: signature || existingPerson.signature,
-        }
-        setPeople(people.map((person) => (person.id === existingPerson.id ? updatedPerson : person)))
-      } else {
-        // Create new person locally
-        updatedPerson = {
-          id: personId,
-          name: personName,
-          transactions: [newTransaction],
-          signature,
-        }
-        setPeople([...people, updatedPerson])
+      // Find the person for the receipt
+      const updatedPerson: Person = {
+        id: personId,
+        name: personName,
+        transactions: [newTransaction],
+        signature,
       }
 
       // Show receipt
@@ -634,8 +570,6 @@ export function TransactionTable() {
         Math.abs(signedAmount),
       )
 
-      // Refresh data from database to ensure sync
-      await fetchPersonsFromDB()
     } catch (error) {
       console.error("Error adding transaction:", error)
       toast({
@@ -656,54 +590,38 @@ export function TransactionTable() {
   }
 
   // Add a new function to handle confirmation
-  const handleSettleConfirmation = () => {
+  const handleSettleConfirmation = async () => {
     // Close confirmation dialog
     setIsConfirmationOpen(false)
 
     if (!soldOutPerson) return
 
-    // Store the person's name before settlement for the success message
+    // Store the person's name and amount before settlement for the success message
     const personName = soldOutPerson.name
+    const totalAmount = calculateTotalAmount(soldOutPerson)
+    const personCopy = { ...soldOutPerson }
 
-    // Mark all transactions as settled
-    setPeople(
-      people.map((person) => {
-        if (person.id === soldOutPerson.id) {
-          // Mark all transactions as settled
-          const updatedTransactions = person.transactions.map((transaction) => {
-            // Only update transactions that match the current view mode
-            if (
-              (viewMode === "they-owe-me" && transaction.amount > 0) ||
-              (viewMode === "i-owe-them" && transaction.amount < 0)
-            ) {
-              return {
-                ...transaction,
-                originalAmount: transaction.amount, // Store original amount
-                amount: 0, // Set amount to 0 to indicate fully paid
-                settled: true, // Mark as settled
-                settlementDate: new Date().toISOString().split("T")[0], // Add settlement date
-              }
-            }
-            return transaction
-          })
+    try {
+      // Delete the person and all their transactions from the database
+      // (the activity log will keep the history)
+      await fetch(`/api/transactions?personId=${soldOutPerson.id}`, {
+        method: "DELETE",
+      })
 
-          return {
-            ...person,
-            transactions: updatedTransactions,
-          }
-        }
-        return person
-      }),
-    )
+      // Refresh from database to ensure sync across all users
+      await fetchPersonsFromDB()
+    } catch (error) {
+      console.error("Error settling transactions:", error)
+    }
 
-    // Close any expanded person to prevent referencing a person that might disappear from the filtered list
+    // Close any expanded person
     setExpandedPerson(null)
 
     // Show receipt
     setReceiptData({
       open: true,
-      title: "Account Settled",
-      person: soldOutPerson,
+      title: language === "fr" ? "Compte Soldé" : "Account Settled",
+      person: personCopy,
       isSettlement: true,
     })
 
@@ -711,11 +629,10 @@ export function TransactionTable() {
     setRecentlySettledPerson(personName)
     setShowSettledMessage(true)
 
-    // Log the activity
-    const totalAmount = calculateTotalAmount(soldOutPerson)
+    // Log the activity (this persists the history in the activity_logs table)
     addActivityLog(
       "settle",
-      `${currentUser.name} a soldé le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}).`,
+      `${currentUser.name} a soldé le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}). Toutes les transactions ont été supprimées.`,
       personName,
       totalAmount,
     )
@@ -803,70 +720,47 @@ export function TransactionTable() {
   }
 
   // Function to toggle a transaction's settled status (for "unsettle" functionality)
-  const toggleTransactionSettled = (personId: string, transactionId: string) => {
+  const toggleTransactionSettled = async (personId: string, transactionId: string) => {
     // Find the person and transaction for logging
     const person = people.find((p) => p.id === personId)
     const transaction = person?.transactions.find((t) => t.id === transactionId)
 
-    setPeople(
-      people.map((p) => {
-        if (p.id === personId) {
-          const updatedTransactions = p.transactions.map((t) => {
-            if (t.id === transactionId) {
-              // If currently settled (amount is 0), restore the original amount
-              if (t.amount === 0) {
-                // Determine the appropriate amount based on view mode
-                const restoredAmount =
-                  viewMode === "they-owe-me"
-                    ? Math.abs(t.originalAmount || 50)
-                    : // Default to 50 if no original amount
-                      -Math.abs(t.originalAmount || 50)
+    if (!transaction) return
 
-                return {
-                  ...t,
-                  amount: restoredAmount,
-                  settled: false,
-                }
-              } else {
-                // If not settled, save the original amount and set to 0
-                return {
-                  ...t,
-                  originalAmount: t.amount, // Store original amount
-                  amount: 0,
-                  settled: true,
-                  settlementDate: new Date().toISOString().split("T")[0], // Add settlement date
-                }
-              }
-            }
-            return t
-          })
+    try {
+      // Persist the change to the database
+      await fetch("/api/transactions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId,
+          paymentAmount: transaction.amount === 0 ? -(transaction.originalAmount || 50) : Math.abs(transaction.amount),
+          settled: transaction.amount !== 0,
+          userId: currentUser.id,
+        }),
+      })
 
-          return {
-            ...p,
-            transactions: updatedTransactions,
-          }
-        }
-        return p
-      }),
-    )
+      // Refresh from database to ensure sync
+      await fetchPersonsFromDB()
+    } catch (error) {
+      console.error("Error toggling settled status:", error)
+    }
 
     // Log the activity
-    if (person && transaction) {
+    if (transaction) {
       const amount = Math.abs(transaction.originalAmount || transaction.amount || 0)
       if (transaction.amount === 0) {
-        // Was settled, now unsettling
         addActivityLog(
           "unsettle",
-          `${currentUser.name} a annulé le règlement de la transaction "${transaction.description}" pour ${person.name} (FCFA ${formatCurrency(amount)}).`,
-          person.name,
+          `${currentUser.name} a annulé le règlement de la transaction "${transaction.description}" pour ${person?.name} (FCFA ${formatCurrency(amount)}).`,
+          person?.name || "",
           amount,
         )
       } else {
-        // Was unsettled, now settling
         addActivityLog(
           "settle",
-          `${currentUser.name} a réglé la transaction "${transaction.description}" pour ${person.name} (FCFA ${formatCurrency(amount)}).`,
-          person.name,
+          `${currentUser.name} a réglé la transaction "${transaction.description}" pour ${person?.name} (FCFA ${formatCurrency(amount)}).`,
+          person?.name || "",
           amount,
         )
       }

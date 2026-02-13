@@ -5,18 +5,10 @@ function getSql() {
   return neon(process.env.DATABASE_URL!)
 }
 
-// GET - Fetch all transactions
-export async function GET(request: Request) {
+// GET - Fetch all transactions (shared across all users)
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 })
-    }
-
     const sql = getSql()
-    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
 
     const transactions = await sql`
       SELECT 
@@ -33,7 +25,6 @@ export async function GET(request: Request) {
         fm_txn_is_payment as "isPayment",
         fm_txn_created_at as "createdAt"
       FROM fm_transactions
-      WHERE fm_txn_user_id = ${userId}::uuid
       ORDER BY fm_txn_date DESC
     `
 
@@ -55,7 +46,6 @@ export async function POST(request: Request) {
     }
 
     const sql = getSql()
-    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
 
     const result = await sql`
       INSERT INTO fm_transactions (
@@ -114,10 +104,9 @@ export async function PUT(request: Request) {
     }
 
     const sql = getSql()
-    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
 
     if (transactionId) {
-      // Update existing transaction
+      // Update existing transaction (any user can update shared data)
       await sql`
         UPDATE fm_transactions
         SET 
@@ -125,7 +114,6 @@ export async function PUT(request: Request) {
           fm_txn_is_settled = ${settled || false},
           fm_txn_updated_at = NOW()
         WHERE fm_txn_id = ${transactionId}
-        AND fm_txn_user_id = ${userId}::uuid
       `
       return NextResponse.json({ success: true })
     } else {
@@ -174,29 +162,23 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE - Delete a person and their transactions
+// DELETE - Delete a person and their transactions (shared data)
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const personId = searchParams.get("personId")
-    const userId = searchParams.get("userId")
 
     if (!personId) {
       return NextResponse.json({ error: "Person ID required" }, { status: 400 })
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 })
-    }
-
     const sql = getSql()
-    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
 
-    // Delete all transactions for this person owned by this user
-    await sql`DELETE FROM fm_transactions WHERE fm_txn_person_id = ${personId} AND fm_txn_user_id = ${userId}::uuid`
+    // Delete all transactions for this person
+    await sql`DELETE FROM fm_transactions WHERE fm_txn_person_id = ${personId}`
     
-    // Delete the person owned by this user
-    await sql`DELETE FROM fm_persons WHERE fm_person_id = ${personId} AND fm_person_user_id = ${userId}::uuid`
+    // Delete the person
+    await sql`DELETE FROM fm_persons WHERE fm_person_id = ${personId}`
 
     return NextResponse.json({ success: true })
   } catch (error) {

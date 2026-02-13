@@ -5,17 +5,18 @@ function getSql() {
   return neon(process.env.DATABASE_URL!)
 }
 
-// GET - Fetch activity logs from database
+// GET - Fetch activity logs from database (admin only)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
+    const role = searchParams.get("role")
+
+    // Only admin can view activity logs
+    if (role !== "admin") {
+      return NextResponse.json({ error: "Access denied. Admin only." }, { status: 403 })
+    }
 
     const sql = getSql()
-
-    if (userId) {
-      await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
-    }
 
     const logs = await sql`
       SELECT 
@@ -43,17 +44,13 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - Save a new activity log
+// POST - Save a new activity log (any user can create logs)
 export async function POST(request: Request) {
   try {
     const body = await request.json()
     const { userId, userName, action, category, description, personId, personName, transactionId, amount, currency } = body
 
     const sql = getSql()
-
-    if (userId) {
-      await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
-    }
 
     await sql`
       INSERT INTO fm_activity_logs (
