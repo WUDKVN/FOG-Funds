@@ -133,7 +133,6 @@ export function TransactionTable() {
       setIsLoadingData(true)
       const response = await fetch("/api/persons")
       const data = await response.json()
-      console.log("[v0] API response persons count:", data.persons?.length, "data:", JSON.stringify(data.persons?.map((p: any) => ({ name: p.name, txnCount: p.transactions?.length }))))
       if (data.persons) {
         // Transform data to match the expected format
         const formattedPersons = data.persons.map((p: any) => ({
@@ -153,7 +152,6 @@ export function TransactionTable() {
             isPayment: t.isPayment,
           })),
         }))
-        console.log("[v0] Setting people:", formattedPersons.length, "persons, first:", JSON.stringify(formattedPersons[0]))
         setPeople(formattedPersons)
       }
     } catch (error) {
