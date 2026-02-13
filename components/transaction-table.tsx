@@ -430,8 +430,20 @@ export function TransactionTable() {
         paymentAmount: updatedAmount,
       })
 
-      // If account was settled, show success message
+      // Log the activity
       if (willBeSettled) {
+        addActivityLog(
+          "payment",
+          `${currentUser.name} a enregistré un paiement de FCFA ${formatCurrency(updatedAmount)} pour ${person.name} et a soldé le compte. Toutes les transactions ont été supprimées.`,
+          person.name,
+          updatedAmount,
+        )
+
+        // If fully settled, delete the person and all their transactions from the DB
+        await fetch(`/api/transactions?personId=${personId}`, {
+          method: "DELETE",
+        })
+
         setRecentlySettledPerson(person.name)
         setShowSettledMessage(true)
 
@@ -439,19 +451,9 @@ export function TransactionTable() {
           setShowSettledMessage(false)
           setRecentlySettledPerson(null)
         }, 5000)
-      }
 
-      // Expand the person details
-      setExpandedPerson(personId)
-
-      // Log the activity
-      if (willBeSettled) {
-        addActivityLog(
-          "payment",
-          `${currentUser.name} a enregistré un paiement de FCFA ${formatCurrency(updatedAmount)} pour ${person.name} et a soldé le compte.`,
-          person.name,
-          updatedAmount,
-        )
+        // Close expanded since the person will be gone
+        setExpandedPerson(null)
       } else {
         addActivityLog(
           "payment",
@@ -459,6 +461,9 @@ export function TransactionTable() {
           person.name,
           updatedAmount,
         )
+
+        // Expand the person details
+        setExpandedPerson(personId)
       }
 
       // Refresh data from database to ensure sync
@@ -591,46 +596,32 @@ export function TransactionTable() {
 
     if (!soldOutPerson) return
 
-    // Store the person's name before settlement for the success message
+    // Store the person's name and amount before settlement for the success message
     const personName = soldOutPerson.name
     const totalAmount = calculateTotalAmount(soldOutPerson)
+    const personCopy = { ...soldOutPerson }
 
     try {
-      // Settle all matching transactions in the database
-      const settlePromises = soldOutPerson.transactions
-        .filter((t) =>
-          (viewMode === "they-owe-me" && t.amount > 0) ||
-          (viewMode === "i-owe-them" && t.amount < 0)
-        )
-        .map((t) =>
-          fetch("/api/transactions", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              transactionId: t.id,
-              paymentAmount: Math.abs(t.amount),
-              settled: true,
-              userId: currentUser.id,
-            }),
-          })
-        )
+      // Delete the person and all their transactions from the database
+      // (the activity log will keep the history)
+      await fetch(`/api/transactions?personId=${soldOutPerson.id}`, {
+        method: "DELETE",
+      })
 
-      await Promise.all(settlePromises)
-
-      // Refresh from database to ensure sync
+      // Refresh from database to ensure sync across all users
       await fetchPersonsFromDB()
     } catch (error) {
       console.error("Error settling transactions:", error)
     }
 
-    // Close any expanded person to prevent referencing a person that might disappear from the filtered list
+    // Close any expanded person
     setExpandedPerson(null)
 
     // Show receipt
     setReceiptData({
       open: true,
-      title: "Account Settled",
-      person: soldOutPerson,
+      title: language === "fr" ? "Compte Soldé" : "Account Settled",
+      person: personCopy,
       isSettlement: true,
     })
 
@@ -638,10 +629,10 @@ export function TransactionTable() {
     setRecentlySettledPerson(personName)
     setShowSettledMessage(true)
 
-    // Log the activity
+    // Log the activity (this persists the history in the activity_logs table)
     addActivityLog(
       "settle",
-      `${currentUser.name} a soldé le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}).`,
+      `${currentUser.name} a soldé le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}). Toutes les transactions ont été supprimées.`,
       personName,
       totalAmount,
     )
