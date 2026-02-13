@@ -162,27 +162,33 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE - Delete a person and their transactions (shared data)
+// DELETE - Delete a single transaction or a person with all their transactions
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const personId = searchParams.get("personId")
-
-    if (!personId) {
-      return NextResponse.json({ error: "Person ID required" }, { status: 400 })
-    }
+    const transactionId = searchParams.get("transactionId")
 
     const sql = getSql()
 
-    // Delete all transactions for this person
-    await sql`DELETE FROM fm_transactions WHERE fm_txn_person_id = ${personId}`
-    
-    // Delete the person
-    await sql`DELETE FROM fm_persons WHERE fm_person_id = ${personId}`
+    if (transactionId) {
+      // Delete a single transaction
+      await sql`DELETE FROM fm_transactions WHERE fm_txn_id = ${transactionId}`
 
-    return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true })
+    }
+
+    if (personId) {
+      // Delete all transactions for this person, then the person
+      await sql`DELETE FROM fm_transactions WHERE fm_txn_person_id = ${personId}`
+      await sql`DELETE FROM fm_persons WHERE fm_person_id = ${personId}`
+
+      return NextResponse.json({ success: true })
+    }
+
+    return NextResponse.json({ error: "Person ID or Transaction ID required" }, { status: 400 })
   } catch (error) {
-    console.error("Error deleting person:", error)
-    return NextResponse.json({ error: "Failed to delete person" }, { status: 500 })
+    console.error("Error deleting:", error)
+    return NextResponse.json({ error: "Failed to delete" }, { status: 500 })
   }
 }
