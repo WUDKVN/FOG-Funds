@@ -5,22 +5,12 @@ function getSql() {
   return neon(process.env.DATABASE_URL!)
 }
 
-// GET - Fetch all persons with their transactions
-export async function GET(request: Request) {
+// GET - Fetch all persons with their transactions (shared across all users)
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 })
-    }
-
     const sql = getSql()
 
-    // Set RLS context for this user
-    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
-
-    // Get all persons for this user
+    // Get all persons (shared data - no user filtering)
     const persons = await sql`
       SELECT 
         fm_person_id as id,
@@ -28,11 +18,10 @@ export async function GET(request: Request) {
         fm_person_signature_data as signature,
         fm_person_created_at as "createdAt"
       FROM fm_persons
-      WHERE fm_person_user_id = ${userId}::uuid
       ORDER BY fm_person_name ASC
     `
 
-    // Get all transactions for this user
+    // Get all transactions (shared data - no user filtering)
     const transactions = await sql`
       SELECT 
         fm_txn_id as id,
@@ -48,7 +37,6 @@ export async function GET(request: Request) {
         fm_txn_is_payment as "isPayment",
         fm_txn_created_at as "createdAt"
       FROM fm_transactions
-      WHERE fm_txn_user_id = ${userId}::uuid
       ORDER BY fm_txn_date DESC
     `
 
@@ -77,14 +65,10 @@ export async function POST(request: Request) {
 
     const sql = getSql()
 
-    // Set RLS context for this user
-    await sql`SELECT set_config('app.current_user_id', ${userId}, false)`
-
-    // Check if person already exists for this user
+    // Check if person already exists (shared across all users)
     const existing = await sql`
       SELECT fm_person_id FROM fm_persons 
       WHERE LOWER(fm_person_name) = LOWER(${name})
-      AND fm_person_user_id = ${userId}::uuid
     `
 
     if (existing.length > 0) {
@@ -94,7 +78,7 @@ export async function POST(request: Request) {
       })
     }
 
-    // Create new person with user_id
+    // Create new person with user_id to track who created it
     const result = await sql`
       INSERT INTO fm_persons (
         fm_person_id,

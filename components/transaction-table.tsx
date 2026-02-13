@@ -127,13 +127,11 @@ export function TransactionTable() {
   // Check if current user is admin
   const isAdmin = currentUser.role === "admin"
 
-  // Fetch persons and transactions from database
-  const fetchPersonsFromDB = async (userIdOverride?: string) => {
+  // Fetch persons and transactions from database (shared across all users)
+  const fetchPersonsFromDB = async () => {
     try {
-      const uid = userIdOverride || currentUser.id
-      if (!uid || uid === "user1") return // Don't fetch without a real user ID
       setIsLoadingData(true)
-      const response = await fetch(`/api/persons?userId=${uid}`)
+      const response = await fetch("/api/persons")
       const data = await response.json()
       if (data.persons) {
         // Transform data to match the expected format
@@ -165,17 +163,15 @@ export function TransactionTable() {
 
   // Load data from database on mount and refresh periodically
   useEffect(() => {
-    if (currentUser.id && currentUser.id !== "user1") {
+    fetchPersonsFromDB()
+    
+    // Refresh data every 5 seconds for real-time sync
+    const interval = setInterval(() => {
       fetchPersonsFromDB()
-      
-      // Refresh data every 5 seconds for real-time sync
-      const interval = setInterval(() => {
-        fetchPersonsFromDB()
-      }, 5000)
+    }, 5000)
 
-      return () => clearInterval(interval)
-    }
-  }, [currentUser.id])
+    return () => clearInterval(interval)
+  }, [])
 
   // Load user from localStorage or sessionStorage on mount
   useEffect(() => {
@@ -289,7 +285,7 @@ export function TransactionTable() {
   // Fetch activity logs from database
   const fetchActivityLogs = async () => {
     try {
-      const response = await fetch(`/api/activity?userId=${currentUser.id}`)
+      const response = await fetch(`/api/activity?role=${currentUser.role}`)
       const data = await response.json()
       if (data.logs) {
         setActivityLogs(data.logs)
@@ -299,19 +295,19 @@ export function TransactionTable() {
     }
   }
 
-  // Load activity logs on mount and auto-refresh every 3 seconds for real-time sync
+  // Load activity logs on mount and auto-refresh every 3 seconds (admin only)
   useEffect(() => {
-    if (currentUser.id && currentUser.id !== "user1") {
+    if (currentUser.role === "admin") {
       fetchActivityLogs()
       
-      // Auto-refresh every 3 seconds for real-time sync between users
+      // Auto-refresh every 3 seconds for real-time sync
       const interval = setInterval(() => {
         fetchActivityLogs()
       }, 3000)
 
       return () => clearInterval(interval)
     }
-  }, [currentUser.id])
+  }, [currentUser.role])
 
   // Get translations based on current language
   const t = translations[language]
