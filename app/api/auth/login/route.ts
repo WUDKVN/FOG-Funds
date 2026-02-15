@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
+import { verifyPassword } from "@/lib/password"
 
 export async function POST(request: Request) {
   try {
@@ -30,8 +31,9 @@ export async function POST(request: Request) {
 
     const user = users[0]
 
-    // Simple password check (in production, use bcrypt)
-    if (user.fm_user_password_hash !== password) {
+    // Verify password using PBKDF2 hash
+    const isValid = verifyPassword(password, user.fm_user_password_hash)
+    if (!isValid) {
       return NextResponse.json(
         { error: "Nom d'utilisateur ou mot de passe incorrect" },
         { status: 401 }
