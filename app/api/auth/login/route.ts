@@ -33,7 +33,14 @@ export async function POST(request: Request) {
     const user = users[0]
 
     // Verify password with bcrypt
+    console.log("[v0] Login attempt for:", username)
+    console.log("[v0] Hash from DB:", user.fm_user_password_hash)
+    console.log("[v0] Hash starts with $2b$:", user.fm_user_password_hash?.startsWith("$2b$"))
+    console.log("[v0] Password length:", password?.length)
+    
     const isValidPassword = await bcrypt.compare(password, user.fm_user_password_hash)
+    console.log("[v0] bcrypt.compare result:", isValidPassword)
+    
     if (!isValidPassword) {
       return NextResponse.json(
         { error: "Nom d'utilisateur ou mot de passe incorrect" },
