@@ -1,5 +1,7 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
+import bcrypt from "bcryptjs"
+import { cookies } from "next/headers"
 
 export async function POST(request: Request) {
   try {
@@ -30,8 +32,9 @@ export async function POST(request: Request) {
 
     const user = users[0]
 
-    // Simple password check (in production, use bcrypt)
-    if (user.fm_user_password_hash !== password) {
+    // Verify password with bcrypt
+    const isValidPassword = await bcrypt.compare(password, user.fm_user_password_hash)
+    if (!isValidPassword) {
       return NextResponse.json(
         { error: "Nom d'utilisateur ou mot de passe incorrect" },
         { status: 401 }
@@ -50,6 +53,23 @@ export async function POST(request: Request) {
       INSERT INTO fm_login_logs (fm_log_user_id, fm_log_user_name, fm_log_user_email, fm_log_action)
       VALUES (${user.fm_user_id}, ${user.fm_user_name}, ${user.fm_user_name}, 'login')
     `
+
+    // Create session data (no sensitive info)
+    const sessionData = JSON.stringify({
+      id: user.fm_user_id,
+      name: user.fm_user_name,
+      role: user.fm_user_role,
+    })
+
+    // Set HTTP-only cookie (not accessible via JavaScript / DevTools)
+    const cookieStore = await cookies()
+    cookieStore.set("session", sessionData, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    })
 
     return NextResponse.json({
       success: true,

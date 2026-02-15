@@ -2,12 +2,11 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Eye, EyeOff } from "lucide-react"
 
@@ -15,25 +14,9 @@ export function LoginForm() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
-
-  // Load saved credentials on mount
-  useEffect(() => {
-    const savedCredentials = localStorage.getItem("savedCredentials")
-    if (savedCredentials) {
-      try {
-        const { username: savedUsername, password: savedPassword } = JSON.parse(savedCredentials)
-        setUsername(savedUsername || "")
-        setPassword(savedPassword || "")
-        setRememberMe(true)
-      } catch {
-        // Ignore parse errors
-      }
-    }
-  }, [])
 
   // Validate username: only letters and numbers
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,31 +46,10 @@ export function LoginForm() {
         return
       }
 
-      // Store user info with remember me preference
-      const userData = { ...data.user, rememberMe }
-      
-      if (rememberMe) {
-        // Save credentials for next login
-        localStorage.setItem("savedCredentials", JSON.stringify({ username, password }))
-        // Use localStorage for persistent storage (survives browser close)
-        localStorage.setItem("loggedInUser", JSON.stringify(userData))
-        localStorage.setItem("rememberMe", "true")
-      } else {
-        // Remove saved credentials
-        localStorage.removeItem("savedCredentials")
-        // Use sessionStorage for session-only storage (cleared when browser closes)
-        sessionStorage.setItem("loggedInUser", JSON.stringify(userData))
-        localStorage.removeItem("rememberMe")
-      }
-
-      // Check if there's a saved location to return to
-      const lastLocation = localStorage.getItem("lastLocation")
-      if (lastLocation && lastLocation !== "/login") {
-        localStorage.removeItem("lastLocation")
-        router.push(lastLocation)
-      } else {
-        router.push("/")
-      }
+      // Session is now stored in HTTP-only cookie by the server
+      // No credentials or user data saved in localStorage/sessionStorage
+      router.push("/")
+      router.refresh()
     } catch (err) {
       console.error("Login error:", err)
       setError("Erreur de connexion. Veuillez réessayer.")
@@ -107,7 +69,7 @@ export function LoginForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="username">Nom d'utilisateur</Label>
+          <Label htmlFor="username">{"Nom d'utilisateur"}</Label>
           <Input
             id="username"
             type="text"
@@ -117,6 +79,7 @@ export function LoginForm() {
             pattern="[a-zA-Z0-9]+"
             title="Lettres et chiffres uniquement"
             required
+            autoComplete="username"
           />
         </div>
         <div className="space-y-2">
@@ -130,6 +93,7 @@ export function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="pr-10"
+              autoComplete="current-password"
             />
             <button
               type="button"
@@ -139,16 +103,6 @@ export function LoginForm() {
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="remember-me"
-            checked={rememberMe}
-            onCheckedChange={(checked) => setRememberMe(checked === true)}
-          />
-          <Label htmlFor="remember-me" className="text-sm font-normal">
-            Se souvenir de moi
-          </Label>
         </div>
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? "Connexion en cours..." : "Se connecter"}

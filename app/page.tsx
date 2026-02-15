@@ -13,21 +13,20 @@ export default function Home() {
   const router = useRouter()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: string } | null>(null)
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Log logout to database
   const logLogout = useCallback(async () => {
-    const storedUser = localStorage.getItem("loggedInUser") || sessionStorage.getItem("loggedInUser")
-    if (storedUser) {
+    if (currentUser) {
       try {
-        const user = JSON.parse(storedUser)
         await fetch("/api/logs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId: user.id,
-            userName: user.name,
-            userEmail: user.name,
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userEmail: currentUser.name,
             action: "logout",
           }),
         })
@@ -35,16 +34,18 @@ export default function Home() {
         console.error("Error logging logout:", error)
       }
     }
-  }, [])
+  }, [currentUser])
 
-  const handleLogout = useCallback(async (saveState = true) => {
-    // Save the current URL/state so user can return after re-login
-    if (saveState) {
-      localStorage.setItem("lastLocation", window.location.pathname + window.location.search)
-    }
+  const handleLogout = useCallback(async () => {
     await logLogout()
+    // Clear the HTTP-only cookie via server endpoint
+    await fetch("/api/auth/logout", { method: "POST" })
+    // Clean up any leftover localStorage/sessionStorage from old auth
     localStorage.removeItem("loggedInUser")
     sessionStorage.removeItem("loggedInUser")
+    localStorage.removeItem("savedCredentials")
+    localStorage.removeItem("rememberMe")
+    localStorage.removeItem("lastLocation")
     router.push("/login")
   }, [router, logLogout])
 
@@ -58,85 +59,57 @@ export default function Home() {
     }, INACTIVITY_TIMEOUT)
   }, [handleLogout])
 
+  // Check session via HTTP-only cookie
   useEffect(() => {
-    // Check if user is logged in (check both localStorage and sessionStorage)
-    const localUser = localStorage.getItem("loggedInUser")
-    const sessionUser = sessionStorage.getItem("loggedInUser")
-    const user = localUser || sessionUser
-    
-    if (!user) {
+    const checkSession = async () => {
+      try {
+        const response = await fetch("/api/auth/me")
+        if (response.ok) {
+          const data = await response.json()
+          if (data.user) {
+            setCurrentUser(data.user)
+            setIsAuthenticated(true)
+            setIsLoading(false)
+            return
+          }
+        }
+      } catch {
+        // Session check failed
+      }
+      // No valid session - redirect to login
+      // Also clean up any old localStorage data
+      localStorage.removeItem("loggedInUser")
+      sessionStorage.removeItem("loggedInUser")
+      localStorage.removeItem("savedCredentials")
+      localStorage.removeItem("rememberMe")
       router.push("/login")
-    } else {
-      setIsAuthenticated(true)
+      setIsLoading(false)
     }
-    setIsLoading(false)
+
+    checkSession()
   }, [router])
 
-  // Security: Auto logout on inactivity (3 minutes)
+  // Security: Auto logout on inactivity (20 minutes)
   useEffect(() => {
     if (!isAuthenticated) return
 
-    // Events that indicate user activity
     const activityEvents = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"]
 
-    // Start the inactivity timer
     resetInactivityTimer()
 
-    // Add event listeners for user activity
     for (const event of activityEvents) {
       document.addEventListener(event, resetInactivityTimer)
     }
 
     return () => {
-      // Clean up event listeners
       for (const event of activityEvents) {
         document.removeEventListener(event, resetInactivityTimer)
       }
-      // Clear the timer
       if (inactivityTimerRef.current) {
         clearTimeout(inactivityTimerRef.current)
       }
     }
   }, [isAuthenticated, resetInactivityTimer])
-
-  // Security: Auto logout when user closes the page (only if not "remember me")
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      const rememberMe = localStorage.getItem("rememberMe")
-      
-      // If remember me is enabled, don't logout on page close
-      if (rememberMe === "true") {
-        return
-      }
-      
-      // Use sendBeacon for reliable logout logging when page closes
-      const storedUser = localStorage.getItem("loggedInUser") || sessionStorage.getItem("loggedInUser")
-      if (storedUser) {
-        try {
-          const user = JSON.parse(storedUser)
-          navigator.sendBeacon(
-            "/api/logs",
-            JSON.stringify({
-              userId: user.id,
-              userName: user.name,
-              userEmail: user.name,
-              action: "logout",
-            })
-          )
-        } catch {
-          // Ignore errors during unload
-        }
-      }
-      localStorage.removeItem("loggedInUser")
-      sessionStorage.removeItem("loggedInUser")
-    }
-
-    window.addEventListener("beforeunload", handleBeforeUnload)
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload)
-    }
-  }, [])
 
   if (isLoading) {
     return (
@@ -146,7 +119,7 @@ export default function Home() {
     )
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !currentUser) {
     return null
   }
 
@@ -163,7 +136,7 @@ export default function Home() {
           />
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Fund Management</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={() => handleLogout(false)}>
+        <Button variant="outline" size="sm" onClick={handleLogout}>
           <LogOut className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Deconnexion</span>
         </Button>

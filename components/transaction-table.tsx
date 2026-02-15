@@ -117,7 +117,7 @@ export function TransactionTable() {
   // Add state for logs dialog
   const [isLogsOpen, setIsLogsOpen] = useState(false)
 
-  // Get logged-in user from localStorage (simulated - in real app would come from auth)
+  // Current user loaded from secure HTTP-only cookie session
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: "admin" | "user" }>({
     id: "user1",
     name: "Admin",
@@ -189,51 +189,38 @@ export function TransactionTable() {
     return () => clearInterval(interval)
   }, [])
 
-  // Load user from localStorage or sessionStorage on mount
+  // Load user from HTTP-only cookie session via /api/auth/me
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedUser = localStorage.getItem("loggedInUser") || sessionStorage.getItem("loggedInUser")
-      if (storedUser) {
-        try {
-          const user = JSON.parse(storedUser)
-          setCurrentUser({
-            id: user.id || "user1",
-            name: user.name || user.email || "Admin",
-            role: user.role || "admin",
-          })
+    const loadUser = async () => {
+      try {
+        const response = await fetch("/api/auth/me")
+        if (response.ok) {
+          const data = await response.json()
+          if (data.user) {
+            setCurrentUser({
+              id: data.user.id || "user1",
+              name: data.user.name || "Admin",
+              role: data.user.role || "admin",
+            })
 
-          // Add login log when user loads
-          const loginLog: LoginLog = {
-            id: `login-${Date.now()}`,
-            userId: user.id || "user1",
-            userName: user.name || user.email || "Admin",
-            userEmail: user.email || "",
-            action: "login",
-            createdAt: new Date().toISOString(),
+            // Add login log when user loads
+            const loginLog: LoginLog = {
+              id: `login-${Date.now()}`,
+              userId: data.user.id || "user1",
+              userName: data.user.name || "Admin",
+              userEmail: "",
+              action: "login",
+              createdAt: new Date().toISOString(),
+            }
+            setLoginLogs((prev) => [loginLog, ...prev])
           }
-          setLoginLogs((prev) => [loginLog, ...prev])
-        } catch {
-          // Use default user if parsing fails
         }
-      }
-
-      // Restore saved table state after re-login
-      const savedState = localStorage.getItem("tableState")
-      if (savedState) {
-        try {
-          const state = JSON.parse(savedState)
-          if (state.viewMode) setViewMode(state.viewMode)
-          if (state.language) setLanguage(state.language)
-          if (state.expandedPerson) setExpandedPerson(state.expandedPerson)
-          if (state.searchQuery) setSearchQuery(state.searchQuery)
-          if (state.monthFilter) setMonthFilter(state.monthFilter)
-          if (state.statusFilter) setStatusFilter(state.statusFilter)
-          localStorage.removeItem("tableState")
-        } catch {
-          // Ignore parse errors
-        }
+      } catch {
+        // Use default user if session check fails
       }
     }
+
+    loadUser()
   }, [])
 
   // Add state for receipt
