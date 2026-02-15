@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
-import bcrypt from "bcryptjs"
+import { verifyPassword } from "@/lib/password"
 import { cookies } from "next/headers"
 
 export async function POST(request: Request) {
@@ -32,14 +32,8 @@ export async function POST(request: Request) {
 
     const user = users[0]
 
-    // Verify password with bcrypt
-    console.log("[v0] Login attempt for:", username)
-    console.log("[v0] Hash from DB:", user.fm_user_password_hash)
-    console.log("[v0] Hash starts with $2b$:", user.fm_user_password_hash?.startsWith("$2b$"))
-    console.log("[v0] Password length:", password?.length)
-    
-    const isValidPassword = await bcrypt.compare(password, user.fm_user_password_hash)
-    console.log("[v0] bcrypt.compare result:", isValidPassword)
+    // Verify password with PBKDF2
+    const isValidPassword = await verifyPassword(password, user.fm_user_password_hash)
     
     if (!isValidPassword) {
       return NextResponse.json(
