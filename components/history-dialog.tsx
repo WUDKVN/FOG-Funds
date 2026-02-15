@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Search, Plus, CreditCard, CheckCircle2, Undo2, Trash2, Edit } from "lucide-react"
+import { Search, Plus, CreditCard, CheckCircle2, Undo2, Trash2, Edit, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { CheckCircle } from "lucide-react"
 import type { ActivityLog } from "@/lib/types"
@@ -87,6 +87,8 @@ function formatDateTime(timestamp: string): string {
 export function HistoryDialog({ open, onClose, activityLogs, viewMode, language = "fr" }: HistoryDialogProps) {
   // Add search state
   const [searchQuery, setSearchQuery] = useState("")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
 
   // Get translations
   const t = translations[language]
@@ -99,15 +101,28 @@ export function HistoryDialog({ open, onClose, activityLogs, viewMode, language 
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   )
 
-  // Apply search filter
+  // Apply search and date filter
   const filteredLogs = sortedLogs.filter((log) => {
+    // Date filter
+    if (dateFrom) {
+      const logDate = new Date(log.timestamp).toISOString().split("T")[0]
+      if (logDate < dateFrom) return false
+    }
+    if (dateTo) {
+      const logDate = new Date(log.timestamp).toISOString().split("T")[0]
+      if (logDate > dateTo) return false
+    }
+
+    // Text search filter
     if (!searchQuery) return true
 
     const query = searchQuery.toLowerCase()
+    const logDateFormatted = formatDateTime(log.timestamp).toLowerCase()
     return (
       log.userName.toLowerCase().includes(query) ||
       log.description.toLowerCase().includes(query) ||
       log.action.toLowerCase().includes(query) ||
+      logDateFormatted.includes(query) ||
       (log.personName && log.personName.toLowerCase().includes(query)) ||
       (log.amount && formatCurrencyWithSpaces(log.amount).includes(query))
     )
@@ -123,15 +138,51 @@ export function HistoryDialog({ open, onClose, activityLogs, viewMode, language 
         <div className="py-4">
           <h3 className="text-lg font-medium mb-4">{t.allActivities}</h3>
 
-          {/* Add search bar */}
-          <div className="relative mb-4">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder={t.searchPlaceholder}
-              className="pl-8 pr-4"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          {/* Search bar and date filters */}
+          <div className="space-y-3 mb-4">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={t.searchPlaceholder}
+                className="pl-8 pr-4"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 items-center">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  {language === "fr" ? "Du" : "From"}
+                </label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="text-sm"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  {language === "fr" ? "Au" : "To"}
+                </label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="text-sm"
+                />
+              </div>
+              {(dateFrom || dateTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => { setDateFrom(""); setDateTo("") }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
 
           {filteredLogs.length === 0 ? (
