@@ -117,7 +117,7 @@ export function TransactionTable() {
   // Add state for logs dialog
   const [isLogsOpen, setIsLogsOpen] = useState(false)
 
-  // Current user loaded from secure HTTP-only cookie session
+  // Get logged-in user from localStorage (simulated - in real app would come from auth)
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: "admin" | "user" }>({
     id: "user1",
     name: "Admin",
@@ -152,23 +152,7 @@ export function TransactionTable() {
             isPayment: t.isPayment,
           })),
         }))
-
-        // Auto-cleanup: delete persons whose total balance is 0 from the DB
-        for (const person of formattedPersons) {
-          const total = person.transactions.reduce((sum: number, t: any) => sum + t.amount, 0)
-          if (person.transactions.length > 0 && Math.abs(total) < 0.01) {
-            // Balance is 0 — delete from database silently
-            fetch(`/api/transactions?personId=${person.id}`, { method: "DELETE" }).catch(() => {})
-          }
-        }
-
-        // Only show persons that still have a non-zero balance
-        const activePersons = formattedPersons.filter((person: any) => {
-          const total = person.transactions.reduce((sum: number, t: any) => sum + t.amount, 0)
-          return Math.abs(total) >= 0.01
-        })
-
-        setPeople(activePersons)
+        setPeople(formattedPersons)
       }
     } catch (error) {
       console.error("Error fetching persons:", error)
@@ -189,38 +173,51 @@ export function TransactionTable() {
     return () => clearInterval(interval)
   }, [])
 
-  // Load user from HTTP-only cookie session via /api/auth/me
+  // Load user from localStorage or sessionStorage on mount
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const response = await fetch("/api/auth/me")
-        if (response.ok) {
-          const data = await response.json()
-          if (data.user) {
-            setCurrentUser({
-              id: data.user.id || "user1",
-              name: data.user.name || "Admin",
-              role: data.user.role || "admin",
-            })
+    if (typeof window !== "undefined") {
+      const storedUser = localStorage.getItem("loggedInUser") || sessionStorage.getItem("loggedInUser")
+      if (storedUser) {
+        try {
+          const user = JSON.parse(storedUser)
+          setCurrentUser({
+            id: user.id || "user1",
+            name: user.name || user.email || "Admin",
+            role: user.role || "admin",
+          })
 
-            // Add login log when user loads
-            const loginLog: LoginLog = {
-              id: `login-${Date.now()}`,
-              userId: data.user.id || "user1",
-              userName: data.user.name || "Admin",
-              userEmail: "",
-              action: "login",
-              createdAt: new Date().toISOString(),
-            }
-            setLoginLogs((prev) => [loginLog, ...prev])
+          // Add login log when user loads
+          const loginLog: LoginLog = {
+            id: `login-${Date.now()}`,
+            userId: user.id || "user1",
+            userName: user.name || user.email || "Admin",
+            userEmail: user.email || "",
+            action: "login",
+            createdAt: new Date().toISOString(),
           }
+          setLoginLogs((prev) => [loginLog, ...prev])
+        } catch {
+          // Use default user if parsing fails
         }
-      } catch {
-        // Use default user if session check fails
+      }
+
+      // Restore saved table state after re-login
+      const savedState = localStorage.getItem("tableState")
+      if (savedState) {
+        try {
+          const state = JSON.parse(savedState)
+          if (state.viewMode) setViewMode(state.viewMode)
+          if (state.language) setLanguage(state.language)
+          if (state.expandedPerson) setExpandedPerson(state.expandedPerson)
+          if (state.searchQuery) setSearchQuery(state.searchQuery)
+          if (state.monthFilter) setMonthFilter(state.monthFilter)
+          if (state.statusFilter) setStatusFilter(state.statusFilter)
+          localStorage.removeItem("tableState")
+        } catch {
+          // Ignore parse errors
+        }
       }
     }
-
-    loadUser()
   }, [])
 
   // Add state for receipt
@@ -722,49 +719,52 @@ export function TransactionTable() {
     setExpandedPerson(null) // Close any expanded rows when switching views
   }
 
-  // Function to settle a transaction: deletes from DB and removes from table
+  // Function to toggle a transaction's settled status (for "unsettle" functionality)
   const toggleTransactionSettled = async (personId: string, transactionId: string) => {
+    // Find the person and transaction for logging
     const person = people.find((p) => p.id === personId)
     const transaction = person?.transactions.find((t) => t.id === transactionId)
 
-    if (!transaction || !person) return
-
-    const amount = Math.abs(transaction.amount || 0)
-    const personName = person.name
+    if (!transaction) return
 
     try {
-      // Calculate if this is the last active transaction for this person in the current view
-      const activeTransactions = person.transactions.filter((t) => {
-        const matchesView = viewMode === "they-owe-me" ? t.amount > 0 : t.amount < 0
-        return matchesView && t.amount !== 0 && t.id !== transactionId
+      // Persist the change to the database
+      await fetch("/api/transactions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId,
+          paymentAmount: transaction.amount === 0 ? -(transaction.originalAmount || 50) : Math.abs(transaction.amount),
+          settled: transaction.amount !== 0,
+          userId: currentUser.id,
+        }),
       })
-
-      if (activeTransactions.length === 0) {
-        // No more active transactions for this person in this view - delete the entire person
-        await fetch(`/api/transactions?personId=${personId}`, {
-          method: "DELETE",
-        })
-        setExpandedPerson(null)
-      } else {
-        // Other transactions remain - just delete this one transaction
-        await fetch(`/api/transactions?transactionId=${transactionId}`, {
-          method: "DELETE",
-        })
-      }
 
       // Refresh from database to ensure sync
       await fetchPersonsFromDB()
     } catch (error) {
-      console.error("Error settling transaction:", error)
+      console.error("Error toggling settled status:", error)
     }
 
     // Log the activity
-    addActivityLog(
-      "settle",
-      `${currentUser.name} a soldé la transaction "${transaction.description}" pour ${personName} (FCFA ${formatCurrency(amount)}). Transaction supprimée.`,
-      personName,
-      amount,
-    )
+    if (transaction) {
+      const amount = Math.abs(transaction.originalAmount || transaction.amount || 0)
+      if (transaction.amount === 0) {
+        addActivityLog(
+          "unsettle",
+          `${currentUser.name} a annulé le règlement de la transaction "${transaction.description}" pour ${person?.name} (FCFA ${formatCurrency(amount)}).`,
+          person?.name || "",
+          amount,
+        )
+      } else {
+        addActivityLog(
+          "settle",
+          `${currentUser.name} a réglé la transaction "${transaction.description}" pour ${person?.name} (FCFA ${formatCurrency(amount)}).`,
+          person?.name || "",
+          amount,
+        )
+      }
+    }
   }
 
   // Toggle language between French and English
