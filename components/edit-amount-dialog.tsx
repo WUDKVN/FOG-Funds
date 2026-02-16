@@ -104,7 +104,7 @@ export function EditAmountDialog({
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">{t.currentAmount}</Label>
               <div className="col-span-3">
-                <div className={`text-2xl font-bold ${viewMode === "they-owe-me" ? "text-green-600" : "text-red-600"}`}>
+                <div className={`text-3xl font-bold ${viewMode === "they-owe-me" ? "text-green-600" : "text-red-600"}`}>
                   FCFA {formatCurrency(currentAmount)}
                 </div>
               </div>
@@ -115,7 +115,7 @@ export function EditAmountDialog({
                 {t.newAmount}
               </Label>
               <div className="col-span-3 flex items-center">
-                <span className="mr-2 text-lg font-bold">FCFA</span>
+                <span className="mr-2 text-xl font-bold">FCFA</span>
                 <Input
                   id="new-amount"
                   type="text"
@@ -123,7 +123,7 @@ export function EditAmountDialog({
                   value={displayAmount}
                   onChange={handleAmountChange}
                   placeholder="0"
-                  className="flex-1 h-14 text-2xl font-bold tracking-wide"
+                  className="flex-1 h-16 text-4xl font-bold tracking-wide"
                   autoFocus
                 />
               </div>

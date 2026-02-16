@@ -160,7 +160,7 @@ export function EditTransactionDialog({
         <div className="mb-4 pb-2 border-b">
           <div className="flex justify-between items-center">
             <span className="text-gray-500">{t.totalAmount}</span>
-            <span className={`${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"} font-bold text-lg`}>
+            <span className={`${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"} font-bold text-2xl`}>
               {viewMode === "they-owe-me" ? "+" : "-"} FCFA {formattedTotalAmount}
             </span>
           </div>
@@ -190,14 +190,14 @@ export function EditTransactionDialog({
                 {t.amount}
               </Label>
               <div className="col-span-3 flex items-center">
-                <span className="mr-2 text-lg font-bold">FCFA</span>
+                <span className="mr-2 text-xl font-bold">FCFA</span>
                 <Input
                   id="amount"
                   type="text"
                   inputMode="numeric"
                   value={displayAmount}
                   onChange={handleAmountChange}
-                  className="flex-1 h-14 text-2xl font-bold tracking-wide"
+                  className="flex-1 h-16 text-4xl font-bold tracking-wide"
                   placeholder="0"
                 />
               </div>
@@ -224,15 +224,7 @@ export function EditTransactionDialog({
               </div>
             </div>
 
-            {/* Show signature for both views */}
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="signature" className="text-right pt-2">
-                {t.signature}
-              </Label>
-              <div className="col-span-3">
-                <SignatureCapture initialSignature={signature} onSignatureCapture={setSignature} language={language} />
-              </div>
-            </div>
+
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

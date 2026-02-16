@@ -303,9 +303,9 @@ export function NewTransactionDialog({
                 {t.amount}
               </Label>
               <div className="col-span-3 flex items-center">
-                <span className="mr-2 text-lg font-bold">FCFA</span>
+                <span className="mr-2 text-xl font-bold">FCFA</span>
                 <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-lg font-bold">
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-xl font-bold">
                     {viewMode === "they-owe-me" ? "+" : ""}
                   </span>
                   <Input
@@ -316,7 +316,7 @@ export function NewTransactionDialog({
                     value={displayAmount}
                     onChange={handleAmountChange}
                     required
-                    className="flex-1 pl-8 h-14 text-2xl font-bold tracking-wide"
+                    className="flex-1 pl-8 h-16 text-4xl font-bold tracking-wide"
                   />
                 </div>
               </div>
@@ -387,15 +387,7 @@ export function NewTransactionDialog({
               </div>
             </div>
 
-            {/* Show signature for both views */}
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="signature" className="text-right pt-2">
-                {t.signature}
-              </Label>
-              <div className="col-span-3">
-                <SignatureCapture initialSignature={signature} onSignatureCapture={setSignature} language={language} />
-              </div>
-            </div>
+
           </div>
           <DialogFooter className="mt-6 pb-2">
             <Button type="button" variant="outline" onClick={onClose}>
