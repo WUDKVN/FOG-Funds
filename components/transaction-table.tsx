@@ -1013,56 +1013,62 @@ export function TransactionTable() {
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-row items-center justify-center gap-2">
-                            {/* (+) button on the LEFT - adds to the total amount */}
+                            {/* (-) button on the LEFT - subtracts from the total amount */}
+                            {totalAmount > 0 ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 min-w-[28px] p-0 bg-transparent border-red-400 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-sm"
+                                onClick={() => handleEditTransaction(person.id)}
+                                title={language === "fr" ? "Soustraire du solde" : "Subtract from balance"}
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                                <span className="sr-only">{language === "fr" ? "Soustraire" : "Subtract"}</span>
+                              </Button>
+                            ) : (
+                              <Button variant="outline" size="sm" className="h-7 w-7 min-w-[28px] p-0 bg-transparent rounded-sm" disabled>
+                                <Minus className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+
+                            {/* Clickable amount in the CENTER (admin only can edit directly) */}
+                            {isAdmin ? (
+                              <button
+                                type="button"
+                                className={`text-sm sm:text-base whitespace-nowrap font-semibold cursor-pointer hover:underline underline-offset-2 transition-colors min-w-[80px] text-center ${viewMode === "they-owe-me" ? "text-green-600 hover:text-green-700" : "text-red-600 hover:text-red-700"}`}
+                                onClick={() => {
+                                  if (totalAmount > 0) {
+                                    setEditingAmount({
+                                      personId: person.id,
+                                      personName: person.name,
+                                      currentAmount: totalAmount,
+                                    })
+                                  }
+                                }}
+                                title={language === "fr" ? "Cliquez pour modifier le montant (admin)" : "Click to edit amount (admin)"}
+                              >
+                                FCFA {formatCurrency(totalAmount)}
+                              </button>
+                            ) : (
+                              <span className={`text-sm sm:text-base whitespace-nowrap font-semibold min-w-[80px] text-center ${viewMode === "they-owe-me" ? "text-green-600" : "text-red-600"}`}>
+                                FCFA {formatCurrency(totalAmount)}
+                              </span>
+                            )}
+
+                            {/* (+) button on the RIGHT - adds to the total amount */}
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-8 w-8 min-w-[32px] p-0 bg-transparent border-green-400 text-green-600 hover:bg-green-50 hover:text-green-700 rounded-full"
+                              className="h-7 w-7 min-w-[28px] p-0 bg-transparent border-green-400 text-green-600 hover:bg-green-50 hover:text-green-700 rounded-sm"
                               onClick={() => {
                                 setExpandedPerson(person.id)
                                 setIsNewTransactionOpen(true)
                               }}
                               title={language === "fr" ? "Ajouter au solde" : "Add to balance"}
                             >
-                              <Plus className="h-4 w-4" />
+                              <Plus className="h-3.5 w-3.5" />
                               <span className="sr-only">{language === "fr" ? "Ajouter" : "Add"}</span>
                             </Button>
-
-                            {/* Clickable amount in the CENTER */}
-                            <button
-                              type="button"
-                              className={`text-sm sm:text-base whitespace-nowrap font-semibold cursor-pointer hover:underline underline-offset-2 transition-colors min-w-[80px] ${viewMode === "they-owe-me" ? "text-green-600 hover:text-green-700" : "text-red-600 hover:text-red-700"}`}
-                              onClick={() => {
-                                if (totalAmount > 0) {
-                                  setEditingAmount({
-                                    personId: person.id,
-                                    personName: person.name,
-                                    currentAmount: totalAmount,
-                                  })
-                                }
-                              }}
-                              title={language === "fr" ? "Cliquez pour modifier le montant" : "Click to edit amount"}
-                            >
-                              FCFA {formatCurrency(totalAmount)}
-                            </button>
-
-                            {/* (-) button on the RIGHT - subtracts from the total amount */}
-                            {totalAmount > 0 ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 w-8 min-w-[32px] p-0 bg-transparent border-red-400 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-full"
-                                onClick={() => handleEditTransaction(person.id)}
-                                title={language === "fr" ? "Soustraire du solde" : "Subtract from balance"}
-                              >
-                                <Minus className="h-4 w-4" />
-                                <span className="sr-only">{language === "fr" ? "Soustraire" : "Subtract"}</span>
-                              </Button>
-                            ) : (
-                              <Button variant="outline" size="sm" className="h-8 w-8 min-w-[32px] p-0 bg-transparent rounded-full" disabled>
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
