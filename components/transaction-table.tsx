@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, ChevronUp, Plus, Search, X, CheckCircle, History, Globe, FileText } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, Minus, Search, X, CheckCircle, History, Globe, FileText, Archive } from "lucide-react"
 import { TransactionDetails } from "@/components/transaction-details"
 import { EditTransactionDialog } from "@/components/edit-transaction-dialog"
 import { NewTransactionDialog } from "@/components/new-transaction-dialog"
 import { SettleConfirmDialog } from "@/components/settle-confirm-dialog"
+import { EditAmountDialog } from "@/components/edit-amount-dialog"
+import { SettledListDialog } from "@/components/settled-list-dialog"
 import { useToast } from "@/hooks/use-toast"
 import type { Person, Transaction, ActivityLog, LoginLog } from "@/lib/types"
 import { LogsDialog } from "@/components/logs-dialog"
@@ -104,6 +106,16 @@ export function TransactionTable() {
 
   // Add state for history dialog
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+
+  // Add state for settled list dialog
+  const [isSettledListOpen, setIsSettledListOpen] = useState(false)
+
+  // Add state for inline amount editing
+  const [editingAmount, setEditingAmount] = useState<{
+    personId: string
+    personName: string
+    currentAmount: number
+  } | null>(null)
 
   // Add state for language
   const [language, setLanguage] = useState<Language>("fr")
@@ -439,6 +451,23 @@ export function TransactionTable() {
           updatedAmount,
         )
 
+        // Archive to settled list before deleting
+        await fetch("/api/settled", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            personName: person.name,
+            personId: personId,
+            totalAmount: currentTotal,
+            currency: "FCFA",
+            type: viewMode,
+            userId: currentUser.id,
+            userName: currentUser.name,
+            transactions: person.transactions,
+            notes: `Settled via full payment of FCFA ${formatCurrency(updatedAmount)}`,
+          }),
+        })
+
         // If fully settled, delete the person and all their transactions from the DB
         await fetch(`/api/transactions?personId=${personId}`, {
           method: "DELETE",
@@ -602,8 +631,23 @@ export function TransactionTable() {
     const personCopy = { ...soldOutPerson }
 
     try {
-      // Delete the person and all their transactions from the database
-      // (the activity log will keep the history)
+      // Archive the person and their transactions to the settled list
+      await fetch("/api/settled", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personName: soldOutPerson.name,
+          personId: soldOutPerson.id,
+          totalAmount: totalAmount,
+          currency: "FCFA",
+          type: viewMode,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          transactions: soldOutPerson.transactions,
+        }),
+      })
+
+      // Delete the person and all their transactions from the active database
       await fetch(`/api/transactions?personId=${soldOutPerson.id}`, {
         method: "DELETE",
       })
@@ -767,6 +811,46 @@ export function TransactionTable() {
     }
   }
 
+  // Handle direct amount edit (click on amount to change it)
+  const handleDirectAmountEdit = async (personId: string, newAmount: number) => {
+    try {
+      await fetch("/api/transactions/edit-amount", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personId,
+          newAmount,
+          type: viewMode,
+          userId: currentUser.id,
+        }),
+      })
+
+      const person = people.find((p) => p.id === personId)
+      if (person) {
+        addActivityLog(
+          "edit",
+          `${currentUser.name} a modifie directement le montant de ${person.name} a FCFA ${formatCurrency(newAmount)}.`,
+          person.name,
+          newAmount,
+        )
+      }
+
+      await fetchPersonsFromDB()
+
+      toast({
+        title: language === "fr" ? "Montant modifie" : "Amount updated",
+        description: language === "fr" ? "Le solde a ete mis a jour." : "The balance has been updated.",
+      })
+    } catch (error) {
+      console.error("Error editing amount:", error)
+      toast({
+        title: language === "fr" ? "Erreur" : "Error",
+        description: language === "fr" ? "Impossible de modifier le montant" : "Failed to edit amount",
+        variant: "destructive",
+      })
+    }
+  }
+
   // Toggle language between French and English
   const toggleLanguage = () => {
     setLanguage(language === "fr" ? "en" : "fr")
@@ -877,6 +961,10 @@ export function TransactionTable() {
                 </Button>
               </>
             )}
+            <Button variant="outline" size="sm" onClick={() => setIsSettledListOpen(true)} className="text-xs sm:text-sm">
+              <Archive className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">{language === "fr" ? "Soldes" : "Settled"}</span>
+            </Button>
             <Button size="sm" onClick={() => setIsNewTransactionOpen(true)} className="text-xs sm:text-sm">
               <Plus className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">{t.newTransaction}</span>
@@ -925,21 +1013,36 @@ export function TransactionTable() {
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
-                            <span className={`text-sm sm:text-base whitespace-nowrap ${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"}`}>
+                            <button
+                              type="button"
+                              className={`text-sm sm:text-base whitespace-nowrap font-medium cursor-pointer hover:underline underline-offset-2 transition-colors ${viewMode === "they-owe-me" ? "text-green-600 hover:text-green-700" : "text-red-600 hover:text-red-700"}`}
+                              onClick={() => {
+                                if (totalAmount > 0) {
+                                  setEditingAmount({
+                                    personId: person.id,
+                                    personName: person.name,
+                                    currentAmount: totalAmount,
+                                  })
+                                }
+                              }}
+                              title={language === "fr" ? "Cliquez pour modifier le montant" : "Click to edit amount"}
+                            >
                               {viewMode === "they-owe-me" ? "+" : "-"} FCFA {formatCurrency(totalAmount)}
-                            </span>
+                            </button>
                             {totalAmount > 0 ? (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-6 px-2 text-xs bg-transparent"
+                                className="h-7 w-7 p-0 bg-transparent"
                                 onClick={() => handleEditTransaction(person.id)}
+                                title={language === "fr" ? "Soustraire du solde" : "Subtract from balance"}
                               >
-                                {t.edit}
+                                <Minus className="h-3.5 w-3.5" />
+                                <span className="sr-only">{language === "fr" ? "Soustraire" : "Subtract"}</span>
                               </Button>
                             ) : (
-                              <Button variant="outline" size="sm" className="h-6 px-2 text-xs bg-transparent" disabled>
-                                {t.edit}
+                              <Button variant="outline" size="sm" className="h-7 w-7 p-0 bg-transparent" disabled>
+                                <Minus className="h-3.5 w-3.5" />
                               </Button>
                             )}
                           </div>
@@ -1033,6 +1136,27 @@ export function TransactionTable() {
         onClose={() => setIsLogsOpen(false)}
         language={language}
         isAdmin={isAdmin}
+      />
+
+      {/* Edit Amount Dialog (inline click-to-edit) */}
+      {editingAmount && (
+        <EditAmountDialog
+          open={true}
+          onClose={() => setEditingAmount(null)}
+          personName={editingAmount.personName}
+          personId={editingAmount.personId}
+          currentAmount={editingAmount.currentAmount}
+          viewMode={viewMode}
+          language={language}
+          onSave={handleDirectAmountEdit}
+        />
+      )}
+
+      {/* Settled List Dialog */}
+      <SettledListDialog
+        open={isSettledListOpen}
+        onClose={() => setIsSettledListOpen(false)}
+        language={language}
       />
 
       {/* Add the TransactionReceipt component to the JSX */}

@@ -60,7 +60,7 @@ const translations = {
     yesAddToExisting: "Oui, ajouter à la personne existante",
     amount: "Montant",
     descriptionLabel: "Description",
-    descriptionPlaceholder: "ex: Dîner, Billets de cinéma",
+    descriptionPlaceholder: "Description de la transaction",
     date: "Date",
     dueDate: "Date d'échéance",
     dueDateHint: "Optionnel: Définir une date limite de paiement. Les entrées en retard seront surlignées en rouge.",
@@ -89,7 +89,7 @@ const translations = {
     yesAddToExisting: "Yes, add to existing person",
     amount: "Amount",
     descriptionLabel: "Description",
-    descriptionPlaceholder: "e.g., Dinner, Movie tickets",
+    descriptionPlaceholder: "Transaction description",
     date: "Date",
     dueDate: "Due Date",
     dueDateHint: "Optional: Set a payment deadline. Overdue entries will be highlighted in red.",
@@ -299,13 +299,13 @@ export function NewTransactionDialog({
             )}
 
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="amount" className="text-right">
+              <Label htmlFor="amount" className="text-right text-base font-semibold">
                 {t.amount}
               </Label>
               <div className="col-span-3 flex items-center">
-                <span className="mr-2">FCFA</span>
+                <span className="mr-2 text-lg font-bold">FCFA</span>
                 <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-lg font-bold">
                     {viewMode === "they-owe-me" ? "+" : ""}
                   </span>
                   <Input
@@ -316,7 +316,7 @@ export function NewTransactionDialog({
                     value={displayAmount}
                     onChange={handleAmountChange}
                     required
-                    className="flex-1 pl-8"
+                    className="flex-1 pl-8 h-14 text-2xl font-bold tracking-wide"
                   />
                 </div>
               </div>
