@@ -160,7 +160,7 @@ export function EditTransactionDialog({
         <div className="mb-4 pb-2 border-b">
           <div className="flex justify-between items-center">
             <span className="text-gray-500">{t.totalAmount}</span>
-            <span className={`${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"} font-medium`}>
+            <span className={`${viewMode === "they-owe-me" ? "text-green-500" : "text-red-500"} font-bold text-lg`}>
               {viewMode === "they-owe-me" ? "+" : "-"} FCFA {formattedTotalAmount}
             </span>
           </div>
@@ -186,18 +186,18 @@ export function EditTransactionDialog({
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="amount" className="text-right">
+              <Label htmlFor="amount" className="text-right text-base font-semibold">
                 {t.amount}
               </Label>
               <div className="col-span-3 flex items-center">
-                <span className="mr-2">FCFA</span>
+                <span className="mr-2 text-lg font-bold">FCFA</span>
                 <Input
                   id="amount"
                   type="text"
                   inputMode="numeric"
                   value={displayAmount}
                   onChange={handleAmountChange}
-                  className="flex-1"
+                  className="flex-1 h-14 text-2xl font-bold tracking-wide"
                   placeholder="0"
                 />
               </div>
