@@ -22,8 +22,8 @@ export function SettleConfirmDialog({ open, onClose, onConfirm, personName }: Se
           </DialogTitle>
         </DialogHeader>
         <div className="pt-2 text-sm text-muted-foreground">
-          Are you sure you want to settle all transactions with <span className="font-medium">{personName}</span>?
-          <div className="mt-2">This will mark all outstanding balances as paid and zero out the account.</div>
+          Es tu sûr de vouloir changer toute transactions en rapport avec<span className="font-medium">{personName}</span>?
+          <div className="mt-2">Cela marquera tous les soldes impayés comme réglés et ramènera le compte à zéro.</div>
         </div>
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={onClose}>
