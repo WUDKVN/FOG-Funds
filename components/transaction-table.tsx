@@ -18,6 +18,7 @@ import type { Person, Transaction, ActivityLog, LoginLog } from "@/lib/types"
 import { LogsDialog } from "@/components/logs-dialog"
 import { TransactionReceipt } from "@/components/transaction-receipt"
 import { HistoryDialog } from "@/components/history-dialog"
+import { AddAmountDialog } from "@/components/add-amount-dialog"
 
 type FilterType = "all" | "they-owe" | "i-owe"
 type ViewMode = "they-owe-me" | "i-owe-them"
@@ -115,6 +116,12 @@ export function TransactionTable() {
     personId: string
     personName: string
     currentAmount: number
+  } | null>(null)
+
+  // Add state for add amount dialog (+ button per person)
+  const [addAmountPerson, setAddAmountPerson] = useState<{
+    person: Person
+    currentTotal: number
   } | null>(null)
 
   // Add state for language
@@ -620,66 +627,38 @@ export function TransactionTable() {
 
   // Add a new function to handle confirmation
   const handleSettleConfirmation = async () => {
-    // Close confirmation dialog
-    setIsConfirmationOpen(false)
-
     if (!soldOutPerson) return
 
-    // Store the person's name and amount before settlement for the success message
+    // Store the person's data before settlement for the success message
     const personName = soldOutPerson.name
+    const personId = soldOutPerson.id
     const totalAmount = calculateTotalAmount(soldOutPerson)
     const personCopy = { ...soldOutPerson }
+    const personTransactions = [...soldOutPerson.transactions]
 
-    try {
-      // Archive the person and their transactions to the settled list
-      await fetch("/api/settled", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          personName: soldOutPerson.name,
-          personId: soldOutPerson.id,
-          totalAmount: totalAmount,
-          currency: "FCFA",
-          type: viewMode,
-          userId: currentUser.id,
-          userName: currentUser.name,
-          transactions: soldOutPerson.transactions,
-        }),
-      })
+    // Close confirmation dialog IMMEDIATELY
+    setIsConfirmationOpen(false)
 
-      // Delete the person and all their transactions from the active database
-      await fetch(`/api/transactions?personId=${soldOutPerson.id}`, {
-        method: "DELETE",
-      })
-
-      // Refresh from database to ensure sync across all users
-      await fetchPersonsFromDB()
-    } catch (error) {
-      console.error("Error settling transactions:", error)
-    }
+    // Optimistic UI: remove the person from state instantly
+    setPeople((prev) => prev.filter((p) => p.id !== personId))
 
     // Close any expanded person
     setExpandedPerson(null)
 
-    // Show receipt
+    // Show receipt immediately
     setReceiptData({
       open: true,
-      title: language === "fr" ? "Compte Soldé" : "Account Settled",
+      title: language === "fr" ? "Compte Sold\u00e9" : "Account Settled",
       person: personCopy,
       isSettlement: true,
     })
 
-    // Show success message
+    // Show success message immediately
     setRecentlySettledPerson(personName)
     setShowSettledMessage(true)
 
-    // Log the activity (this persists the history in the activity_logs table)
-    addActivityLog(
-      "settle",
-      `${currentUser.name} a soldé le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}). Toutes les transactions ont été supprimées.`,
-      personName,
-      totalAmount,
-    )
+    // Reset state
+    setSoldOutPerson(null)
 
     // Hide the message after 5 seconds
     setTimeout(() => {
@@ -687,8 +666,40 @@ export function TransactionTable() {
       setRecentlySettledPerson(null)
     }, 5000)
 
-    // Reset state
-    setSoldOutPerson(null)
+    // Log the activity
+    addActivityLog(
+      "settle",
+      `${currentUser.name} a sold\u00e9 le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}). Toutes les transactions ont \u00e9t\u00e9 supprim\u00e9es.`,
+      personName,
+      totalAmount,
+    )
+
+    // Do the database work in the background (non-blocking)
+    try {
+      await Promise.all([
+        fetch("/api/settled", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            personName,
+            personId,
+            totalAmount,
+            currency: "FCFA",
+            type: viewMode,
+            userId: currentUser.id,
+            userName: currentUser.name,
+            transactions: personTransactions,
+          }),
+        }),
+        fetch(`/api/transactions?personId=${personId}`, {
+          method: "DELETE",
+        }),
+      ])
+    } catch (error) {
+      console.error("Error settling transactions:", error)
+      // Refresh from DB to restore state if background operations failed
+      await fetchPersonsFromDB()
+    }
   }
 
   // Calculate total amount for a person based on view mode
@@ -1061,8 +1072,10 @@ export function TransactionTable() {
                               size="sm"
                               className="h-7 w-7 min-w-[28px] p-0 bg-transparent border-green-400 text-green-600 hover:bg-green-50 hover:text-green-700 rounded-sm"
                               onClick={() => {
-                                setExpandedPerson(person.id)
-                                setIsNewTransactionOpen(true)
+                                setAddAmountPerson({
+                                  person,
+                                  currentTotal: totalAmount,
+                                })
                               }}
                               title={language === "fr" ? "Ajouter au solde" : "Add to balance"}
                             >
@@ -1173,6 +1186,19 @@ export function TransactionTable() {
           viewMode={viewMode}
           language={language}
           onSave={handleDirectAmountEdit}
+        />
+      )}
+
+      {/* Add Amount Dialog (+ button per person) */}
+      {addAmountPerson && (
+        <AddAmountDialog
+          open={true}
+          onClose={() => setAddAmountPerson(null)}
+          person={addAmountPerson.person}
+          currentTotal={addAmountPerson.currentTotal}
+          viewMode={viewMode}
+          language={language}
+          onAdd={handleAddTransaction}
         />
       )}
 
