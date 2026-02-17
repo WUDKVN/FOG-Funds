@@ -18,6 +18,7 @@ import type { Person, Transaction, ActivityLog, LoginLog } from "@/lib/types"
 import { LogsDialog } from "@/components/logs-dialog"
 import { TransactionReceipt } from "@/components/transaction-receipt"
 import { HistoryDialog } from "@/components/history-dialog"
+import { AddAmountDialog } from "@/components/add-amount-dialog"
 
 type FilterType = "all" | "they-owe" | "i-owe"
 type ViewMode = "they-owe-me" | "i-owe-them"
@@ -115,6 +116,12 @@ export function TransactionTable() {
     personId: string
     personName: string
     currentAmount: number
+  } | null>(null)
+
+  // Add state for add amount dialog (+ button per person)
+  const [addAmountPerson, setAddAmountPerson] = useState<{
+    person: Person
+    currentTotal: number
   } | null>(null)
 
   // Add state for language
@@ -398,9 +405,76 @@ export function TransactionTable() {
     const currentTotal = calculateTotalAmount(person)
     const willBeSettled = Math.abs(updatedAmount - currentTotal) < 0.01
 
+    // Create local payment transaction object for optimistic UI
+    const paymentTransaction: Transaction = {
+      id: `temp-pay-${Date.now()}`,
+      date: updatedDate,
+      description: updatedDescription || (language === "fr" ? "Paiement" : "Payment"),
+      amount: viewMode === "they-owe-me" ? -updatedAmount : updatedAmount,
+      comment: updatedComment || (language === "fr" ? "Paiement" : "Payment"),
+      settled: true,
+      signature: signature,
+      isPayment: true,
+    }
+
+    // Close dialog immediately
+    setEditingTransaction(null)
+
+    // Optimistic UI: update person in state instantly
+    if (willBeSettled) {
+      // Remove person from list if fully settled
+      setPeople((prev) => prev.filter((p) => p.id !== personId))
+      setExpandedPerson(null)
+      setRecentlySettledPerson(person.name)
+      setShowSettledMessage(true)
+      setTimeout(() => {
+        setShowSettledMessage(false)
+        setRecentlySettledPerson(null)
+      }, 5000)
+    } else {
+      // Add payment transaction to person's list
+      setPeople((prev) =>
+        prev.map((p) =>
+          p.id === personId
+            ? { ...p, transactions: [...p.transactions, paymentTransaction] }
+            : p,
+        ),
+      )
+      setExpandedPerson(personId)
+    }
+
+    // Show receipt immediately
+    setReceiptData({
+      open: true,
+      title: willBeSettled
+        ? (language === "fr" ? "Compte Sold\u00e9" : "Account Settled")
+        : (language === "fr" ? "Paiement Enregistr\u00e9" : "Payment Recorded"),
+      person,
+      transaction: paymentTransaction,
+      isSettlement: willBeSettled,
+      paymentAmount: updatedAmount,
+    })
+
+    // Log the activity immediately
+    if (willBeSettled) {
+      addActivityLog(
+        "payment",
+        `${currentUser.name} a enregistr\u00e9 un paiement de FCFA ${formatCurrency(updatedAmount)} pour ${person.name} et a sold\u00e9 le compte. Toutes les transactions ont \u00e9t\u00e9 supprim\u00e9es.`,
+        person.name,
+        updatedAmount,
+      )
+    } else {
+      addActivityLog(
+        "payment",
+        `${currentUser.name} a enregistr\u00e9 un paiement de FCFA ${formatCurrency(updatedAmount)} pour ${person.name}.`,
+        person.name,
+        updatedAmount,
+      )
+    }
+
+    // Do the database work in the background (non-blocking)
     try {
-      // Save payment transaction to database
-      const response = await fetch("/api/transactions", {
+      await fetch("/api/transactions", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -416,97 +490,42 @@ export function TransactionTable() {
           userId: currentUser.id,
         }),
       })
-      const data = await response.json()
 
-      // Create local payment transaction object for UI
-      const paymentTransaction: Transaction = {
-        id: data.id || `t${Date.now()}`,
-        date: updatedDate,
-        description: updatedDescription || (language === "fr" ? "Paiement" : "Payment"),
-        amount: viewMode === "they-owe-me" ? -updatedAmount : updatedAmount,
-        comment: updatedComment || (language === "fr" ? "Paiement" : "Payment"),
-        settled: true,
-        signature: signature,
-        isPayment: true,
-      }
-
-      // Show receipt after update
-      setReceiptData({
-        open: true,
-        title: willBeSettled 
-          ? (language === "fr" ? "Compte Soldé" : "Account Settled") 
-          : (language === "fr" ? "Paiement Enregistré" : "Payment Recorded"),
-        person,
-        transaction: paymentTransaction,
-        isSettlement: willBeSettled,
-        paymentAmount: updatedAmount,
-      })
-
-      // Log the activity
       if (willBeSettled) {
-        addActivityLog(
-          "payment",
-          `${currentUser.name} a enregistré un paiement de FCFA ${formatCurrency(updatedAmount)} pour ${person.name} et a soldé le compte. Toutes les transactions ont été supprimées.`,
-          person.name,
-          updatedAmount,
-        )
-
-        // Archive to settled list before deleting
-        await fetch("/api/settled", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            personName: person.name,
-            personId: personId,
-            totalAmount: currentTotal,
-            currency: "FCFA",
-            type: viewMode,
-            userId: currentUser.id,
-            userName: currentUser.name,
-            transactions: person.transactions,
-            notes: `Settled via full payment of FCFA ${formatCurrency(updatedAmount)}`,
+        await Promise.all([
+          fetch("/api/settled", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              personName: person.name,
+              personId: personId,
+              totalAmount: currentTotal,
+              currency: "FCFA",
+              type: viewMode,
+              userId: currentUser.id,
+              userName: currentUser.name,
+              transactions: person.transactions,
+              notes: `Settled via full payment of FCFA ${formatCurrency(updatedAmount)}`,
+            }),
           }),
-        })
-
-        // If fully settled, delete the person and all their transactions from the DB
-        await fetch(`/api/transactions?personId=${personId}`, {
-          method: "DELETE",
-        })
-
-        setRecentlySettledPerson(person.name)
-        setShowSettledMessage(true)
-
-        setTimeout(() => {
-          setShowSettledMessage(false)
-          setRecentlySettledPerson(null)
-        }, 5000)
-
-        // Close expanded since the person will be gone
-        setExpandedPerson(null)
-      } else {
-        addActivityLog(
-          "payment",
-          `${currentUser.name} a enregistré un paiement de FCFA ${formatCurrency(updatedAmount)} pour ${person.name}.`,
-          person.name,
-          updatedAmount,
-        )
-
-        // Expand the person details
-        setExpandedPerson(personId)
+          fetch(`/api/transactions?personId=${personId}`, {
+            method: "DELETE",
+          }),
+        ])
       }
 
-      // Refresh data from database to ensure sync
+      // Silently refresh from DB to sync real IDs
       await fetchPersonsFromDB()
     } catch (error) {
       console.error("Error updating transaction:", error)
+      // Rollback: refresh from DB to restore correct state
+      await fetchPersonsFromDB()
       toast({
         title: language === "fr" ? "Erreur" : "Error",
         description: language === "fr" ? "Impossible d'enregistrer le paiement" : "Failed to record payment",
         variant: "destructive",
       })
     }
-
-    setEditingTransaction(null)
   }
 
   // Update handleAddTransaction to include settled status and save to database
@@ -529,22 +548,83 @@ export function TransactionTable() {
     // If amount is 0, automatically mark as settled
     const isSettled = signedAmount === 0 ? true : settled
 
+    // Create a temporary transaction for optimistic UI
+    const tempId = `temp-${Date.now()}`
+    const newTransaction: Transaction = {
+      id: tempId,
+      date,
+      description,
+      amount: signedAmount,
+      comment,
+      settled: isSettled,
+      signature,
+      dueDate,
+    }
+
+    // Optimistic UI: add transaction to state immediately
+    const existingPerson = people.find((p) => p.name.toLowerCase() === personName.toLowerCase())
+    if (existingPerson) {
+      setPeople((prev) =>
+        prev.map((p) =>
+          p.id === existingPerson.id
+            ? { ...p, transactions: [...p.transactions, newTransaction] }
+            : p,
+        ),
+      )
+    } else {
+      const tempPersonId = `temp-person-${Date.now()}`
+      setPeople((prev) => [
+        ...prev,
+        {
+          id: tempPersonId,
+          name: personName,
+          transactions: [newTransaction],
+          signature,
+        },
+      ])
+    }
+
+    // Close dialog and show receipt immediately
+    setIsNewTransactionOpen(false)
+    setAddAmountPerson(null)
+
+    // Show receipt
+    const receiptPerson: Person = {
+      id: existingPerson?.id || `temp-person-${Date.now()}`,
+      name: personName,
+      transactions: [newTransaction],
+      signature,
+    }
+    setReceiptData({
+      open: true,
+      title: language === "fr" ? "Transaction Ajout\u00e9e" : "Transaction Added",
+      person: receiptPerson,
+      transaction: newTransaction,
+      isSettlement: false,
+    })
+
+    // Log the activity
+    addActivityLog(
+      "create",
+      `${currentUser.name} a cr\u00e9\u00e9 une nouvelle transaction de FCFA ${formatCurrency(Math.abs(signedAmount))} pour ${personName} (${description}).`,
+      personName,
+      Math.abs(signedAmount),
+    )
+
+    // Do the database work in the background (non-blocking)
     try {
-      // Check if person exists in database or create new one
       const personResponse = await fetch("/api/persons", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: personName, signature, userId: currentUser.id }),
       })
       const personData = await personResponse.json()
-      const personId = personData.id
 
-      // Create transaction in database
-      const txnResponse = await fetch("/api/transactions", {
+      await fetch("/api/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          personId,
+          personId: personData.id,
           description,
           amount: signedAmount,
           date,
@@ -557,58 +637,19 @@ export function TransactionTable() {
           userId: currentUser.id,
         }),
       })
-      const txnData = await txnResponse.json()
 
-      // Refresh from database to get the canonical data for all users
+      // Silently refresh from DB to sync real IDs
       await fetchPersonsFromDB()
-
-      // Create local transaction object for receipt display
-      const newTransaction: Transaction = {
-        id: txnData.id,
-        date,
-        description,
-        amount: signedAmount,
-        comment,
-        settled: isSettled,
-        signature,
-        dueDate,
-      }
-
-      // Find the person for the receipt
-      const updatedPerson: Person = {
-        id: personId,
-        name: personName,
-        transactions: [newTransaction],
-        signature,
-      }
-
-      // Show receipt
-      setReceiptData({
-        open: true,
-        title: language === "fr" ? "Transaction Ajoutée" : "Transaction Added",
-        person: updatedPerson,
-        transaction: newTransaction,
-        isSettlement: false,
-      })
-
-      // Log the activity
-      addActivityLog(
-        "create",
-        `${currentUser.name} a créé une nouvelle transaction de FCFA ${formatCurrency(Math.abs(signedAmount))} pour ${personName} (${description}).`,
-        personName,
-        Math.abs(signedAmount),
-      )
-
     } catch (error) {
       console.error("Error adding transaction:", error)
+      // Rollback: refresh from DB to restore correct state
+      await fetchPersonsFromDB()
       toast({
         title: language === "fr" ? "Erreur" : "Error",
         description: language === "fr" ? "Impossible d'ajouter la transaction" : "Failed to add transaction",
         variant: "destructive",
       })
     }
-
-    setIsNewTransactionOpen(false)
   }
 
   // Update the handleSoldOutClick function to show confirmation first
@@ -620,66 +661,38 @@ export function TransactionTable() {
 
   // Add a new function to handle confirmation
   const handleSettleConfirmation = async () => {
-    // Close confirmation dialog
-    setIsConfirmationOpen(false)
-
     if (!soldOutPerson) return
 
-    // Store the person's name and amount before settlement for the success message
+    // Store the person's data before settlement for the success message
     const personName = soldOutPerson.name
+    const personId = soldOutPerson.id
     const totalAmount = calculateTotalAmount(soldOutPerson)
     const personCopy = { ...soldOutPerson }
+    const personTransactions = [...soldOutPerson.transactions]
 
-    try {
-      // Archive the person and their transactions to the settled list
-      await fetch("/api/settled", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          personName: soldOutPerson.name,
-          personId: soldOutPerson.id,
-          totalAmount: totalAmount,
-          currency: "FCFA",
-          type: viewMode,
-          userId: currentUser.id,
-          userName: currentUser.name,
-          transactions: soldOutPerson.transactions,
-        }),
-      })
+    // Close confirmation dialog IMMEDIATELY
+    setIsConfirmationOpen(false)
 
-      // Delete the person and all their transactions from the active database
-      await fetch(`/api/transactions?personId=${soldOutPerson.id}`, {
-        method: "DELETE",
-      })
-
-      // Refresh from database to ensure sync across all users
-      await fetchPersonsFromDB()
-    } catch (error) {
-      console.error("Error settling transactions:", error)
-    }
+    // Optimistic UI: remove the person from state instantly
+    setPeople((prev) => prev.filter((p) => p.id !== personId))
 
     // Close any expanded person
     setExpandedPerson(null)
 
-    // Show receipt
+    // Show receipt immediately
     setReceiptData({
       open: true,
-      title: language === "fr" ? "Compte Soldé" : "Account Settled",
+      title: language === "fr" ? "Compte Sold\u00e9" : "Account Settled",
       person: personCopy,
       isSettlement: true,
     })
 
-    // Show success message
+    // Show success message immediately
     setRecentlySettledPerson(personName)
     setShowSettledMessage(true)
 
-    // Log the activity (this persists the history in the activity_logs table)
-    addActivityLog(
-      "settle",
-      `${currentUser.name} a soldé le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}). Toutes les transactions ont été supprimées.`,
-      personName,
-      totalAmount,
-    )
+    // Reset state
+    setSoldOutPerson(null)
 
     // Hide the message after 5 seconds
     setTimeout(() => {
@@ -687,8 +700,40 @@ export function TransactionTable() {
       setRecentlySettledPerson(null)
     }, 5000)
 
-    // Reset state
-    setSoldOutPerson(null)
+    // Log the activity
+    addActivityLog(
+      "settle",
+      `${currentUser.name} a sold\u00e9 le compte de ${personName} (FCFA ${formatCurrency(totalAmount)}). Toutes les transactions ont \u00e9t\u00e9 supprim\u00e9es.`,
+      personName,
+      totalAmount,
+    )
+
+    // Do the database work in the background (non-blocking)
+    try {
+      await Promise.all([
+        fetch("/api/settled", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            personName,
+            personId,
+            totalAmount,
+            currency: "FCFA",
+            type: viewMode,
+            userId: currentUser.id,
+            userName: currentUser.name,
+            transactions: personTransactions,
+          }),
+        }),
+        fetch(`/api/transactions?personId=${personId}`, {
+          method: "DELETE",
+        }),
+      ])
+    } catch (error) {
+      console.error("Error settling transactions:", error)
+      // Refresh from DB to restore state if background operations failed
+      await fetchPersonsFromDB()
+    }
   }
 
   // Calculate total amount for a person based on view mode
@@ -813,6 +858,34 @@ export function TransactionTable() {
 
   // Handle direct amount edit (click on amount to change it)
   const handleDirectAmountEdit = async (personId: string, newAmount: number) => {
+    const person = people.find((p) => p.id === personId)
+
+    // Optimistic UI: update the person's transactions to reflect new amount immediately
+    if (person) {
+      const signedAmount = viewMode === "they-owe-me" ? Math.abs(newAmount) : -Math.abs(newAmount)
+      setPeople((prev) =>
+        prev.map((p) =>
+          p.id === personId
+            ? { ...p, transactions: [{ ...p.transactions[0], id: p.transactions[0]?.id || `temp-${Date.now()}`, amount: signedAmount, date: p.transactions[0]?.date || new Date().toISOString().split("T")[0], description: p.transactions[0]?.description || "Amount" }] }
+            : p,
+        ),
+      )
+
+      // Show toast immediately
+      toast({
+        title: language === "fr" ? "Montant modifi\u00e9" : "Amount updated",
+        description: language === "fr" ? "Le solde a \u00e9t\u00e9 mis \u00e0 jour." : "The balance has been updated.",
+      })
+
+      addActivityLog(
+        "edit",
+        `${currentUser.name} a modifi\u00e9 directement le montant de ${person.name} \u00e0 FCFA ${formatCurrency(newAmount)}.`,
+        person.name,
+        newAmount,
+      )
+    }
+
+    // Do the database work in the background (non-blocking)
     try {
       await fetch("/api/transactions/edit-amount", {
         method: "PUT",
@@ -825,24 +898,12 @@ export function TransactionTable() {
         }),
       })
 
-      const person = people.find((p) => p.id === personId)
-      if (person) {
-        addActivityLog(
-          "edit",
-          `${currentUser.name} a modifie directement le montant de ${person.name} a FCFA ${formatCurrency(newAmount)}.`,
-          person.name,
-          newAmount,
-        )
-      }
-
+      // Silently refresh from DB to sync
       await fetchPersonsFromDB()
-
-      toast({
-        title: language === "fr" ? "Montant modifie" : "Amount updated",
-        description: language === "fr" ? "Le solde a ete mis a jour." : "The balance has been updated.",
-      })
     } catch (error) {
       console.error("Error editing amount:", error)
+      // Rollback: refresh from DB to restore correct state
+      await fetchPersonsFromDB()
       toast({
         title: language === "fr" ? "Erreur" : "Error",
         description: language === "fr" ? "Impossible de modifier le montant" : "Failed to edit amount",
@@ -1061,8 +1122,10 @@ export function TransactionTable() {
                               size="sm"
                               className="h-7 w-7 min-w-[28px] p-0 bg-transparent border-green-400 text-green-600 hover:bg-green-50 hover:text-green-700 rounded-sm"
                               onClick={() => {
-                                setExpandedPerson(person.id)
-                                setIsNewTransactionOpen(true)
+                                setAddAmountPerson({
+                                  person,
+                                  currentTotal: totalAmount,
+                                })
                               }}
                               title={language === "fr" ? "Ajouter au solde" : "Add to balance"}
                             >
@@ -1173,6 +1236,19 @@ export function TransactionTable() {
           viewMode={viewMode}
           language={language}
           onSave={handleDirectAmountEdit}
+        />
+      )}
+
+      {/* Add Amount Dialog (+ button per person) */}
+      {addAmountPerson && (
+        <AddAmountDialog
+          open={true}
+          onClose={() => setAddAmountPerson(null)}
+          person={addAmountPerson.person}
+          currentTotal={addAmountPerson.currentTotal}
+          viewMode={viewMode}
+          language={language}
+          onAdd={handleAddTransaction}
         />
       )}
 
