@@ -1,52 +1,63 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
+import { getCached, invalidateCache, CACHE_KEYS } from "@/lib/cache"
 
 function getSql() {
   return neon(process.env.DATABASE_URL!)
 }
 
 // GET - Fetch all persons with their transactions (shared across all users)
+// Cached for 60 seconds to reduce Neon queries
 export async function GET() {
   try {
-    const sql = getSql()
+    const personsWithTransactions = await getCached(CACHE_KEYS.PERSONS, async () => {
+      const sql = getSql()
 
-    // Get all persons (shared data - no user filtering)
-    const persons = await sql`
-      SELECT 
-        fm_person_id as id,
-        fm_person_name as name,
-        fm_person_signature_data as signature,
-        fm_person_created_at as "createdAt"
-      FROM fm_persons
-      ORDER BY fm_person_name ASC
-    `
+      // Get all persons (shared data - no user filtering)
+      const persons = await sql`
+        SELECT 
+          fm_person_id as id,
+          fm_person_name as name,
+          fm_person_signature_data as signature,
+          fm_person_created_at as "createdAt"
+        FROM fm_persons
+        ORDER BY fm_person_name ASC
+      `
 
-    // Get all transactions (shared data - no user filtering)
-    const transactions = await sql`
-      SELECT 
-        fm_txn_id as id,
-        fm_txn_person_id as "personId",
-        fm_txn_description as description,
-        fm_txn_amount as amount,
-        fm_txn_date as date,
-        fm_txn_due_date as "dueDate",
-        fm_txn_comment as comment,
-        fm_txn_is_settled as settled,
-        fm_txn_signature_data as signature,
-        fm_txn_type as type,
-        fm_txn_is_payment as "isPayment",
-        fm_txn_created_at as "createdAt"
-      FROM fm_transactions
-      ORDER BY fm_txn_date DESC
-    `
+      // Get all transactions (shared data - no user filtering)
+      const transactions = await sql`
+        SELECT 
+          fm_txn_id as id,
+          fm_txn_person_id as "personId",
+          fm_txn_description as description,
+          fm_txn_amount as amount,
+          fm_txn_date as date,
+          fm_txn_due_date as "dueDate",
+          fm_txn_comment as comment,
+          fm_txn_is_settled as settled,
+          fm_txn_signature_data as signature,
+          fm_txn_type as type,
+          fm_txn_is_payment as "isPayment",
+          fm_txn_created_at as "createdAt"
+        FROM fm_transactions
+        ORDER BY fm_txn_date DESC
+      `
 
-    // Group transactions by person
-    const personsWithTransactions = persons.map((person: any) => ({
-      ...person,
-      transactions: transactions.filter((t: any) => t.personId === person.id),
-    }))
+      // Group transactions by person
+      return persons.map((person: any) => ({
+        ...person,
+        transactions: transactions.filter((t: any) => t.personId === person.id),
+      }))
+    })
 
-    return NextResponse.json({ persons: personsWithTransactions })
+    return NextResponse.json(
+      { persons: personsWithTransactions },
+      {
+        headers: {
+          "Cache-Control": "private, s-maxage=60, stale-while-revalidate=30",
+        },
+      }
+    )
   } catch (error) {
     console.error("Error fetching persons:", error)
     return NextResponse.json({ error: "Failed to fetch persons" }, { status: 500 })
@@ -97,6 +108,9 @@ export async function POST(request: Request) {
       )
       RETURNING fm_person_id as id
     `
+
+    // Invalidate persons cache after creating a new person
+    invalidateCache(CACHE_KEYS.PERSONS)
 
     return NextResponse.json({ id: result[0].id, exists: false })
   } catch (error) {

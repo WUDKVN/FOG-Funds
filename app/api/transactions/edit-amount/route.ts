@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
+import { invalidateCache, CACHE_KEYS } from "@/lib/cache"
 
 function getSql() {
   return neon(process.env.DATABASE_URL!)
@@ -71,6 +72,10 @@ export async function PUT(request: Request) {
         NOW()
       )
     `
+
+    // Invalidate caches after editing amounts
+    invalidateCache(CACHE_KEYS.TRANSACTIONS)
+    invalidateCache(CACHE_KEYS.PERSONS)
 
     return NextResponse.json({ success: true })
   } catch (error) {
