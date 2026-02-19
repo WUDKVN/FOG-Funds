@@ -184,10 +184,10 @@ export function TransactionTable() {
   useEffect(() => {
     fetchPersonsFromDB()
     
-    // Refresh data every 5 seconds for real-time sync
+    // Refresh data every 30 seconds (server-side cache handles freshness)
     const interval = setInterval(() => {
       fetchPersonsFromDB()
-    }, 5000)
+    }, 30000)
 
     return () => clearInterval(interval)
   }, [])
@@ -319,10 +319,10 @@ export function TransactionTable() {
     if (currentUser.role === "admin") {
       fetchActivityLogs()
       
-      // Auto-refresh every 3 seconds for real-time sync
+      // Auto-refresh every 30 seconds (server-side cache handles freshness)
       const interval = setInterval(() => {
         fetchActivityLogs()
-      }, 3000)
+      }, 30000)
 
       return () => clearInterval(interval)
     }

@@ -1,11 +1,13 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
+import { getCached, invalidateCache, CACHE_KEYS } from "@/lib/cache"
 
 function getSql() {
   return neon(process.env.DATABASE_URL!)
 }
 
 // GET - Fetch activity logs from database (admin only)
+// Cached for 60 seconds to reduce Neon queries
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -16,28 +18,37 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Access denied. Admin only." }, { status: 403 })
     }
 
-    const sql = getSql()
+    const logs = await getCached(CACHE_KEYS.ACTIVITY_LOGS, async () => {
+      const sql = getSql()
 
-    const logs = await sql`
-      SELECT 
-        fm_activity_id as id,
-        fm_activity_user_id as "userId",
-        fm_activity_user_name as "userName",
-        fm_activity_action as action,
-        fm_activity_category as category,
-        fm_activity_description as description,
-        fm_activity_person_id as "personId",
-        fm_activity_person_name as "personName",
-        fm_activity_txn_id as "transactionId",
-        fm_activity_amount as amount,
-        fm_activity_currency as currency,
-        fm_activity_created_at as timestamp
-      FROM fm_activity_logs
-      ORDER BY fm_activity_created_at DESC
-      LIMIT 100
-    `
+      return await sql`
+        SELECT 
+          fm_activity_id as id,
+          fm_activity_user_id as "userId",
+          fm_activity_user_name as "userName",
+          fm_activity_action as action,
+          fm_activity_category as category,
+          fm_activity_description as description,
+          fm_activity_person_id as "personId",
+          fm_activity_person_name as "personName",
+          fm_activity_txn_id as "transactionId",
+          fm_activity_amount as amount,
+          fm_activity_currency as currency,
+          fm_activity_created_at as timestamp
+        FROM fm_activity_logs
+        ORDER BY fm_activity_created_at DESC
+        LIMIT 100
+      `
+    })
 
-    return NextResponse.json({ logs })
+    return NextResponse.json(
+      { logs },
+      {
+        headers: {
+          "Cache-Control": "private, s-maxage=60, stale-while-revalidate=30",
+        },
+      }
+    )
   } catch (error) {
     console.error("Error fetching activity logs:", error)
     return NextResponse.json({ error: "Failed to fetch activity logs" }, { status: 500 })
@@ -77,6 +88,9 @@ export async function POST(request: Request) {
         ${currency || 'FCFA'}
       )
     `
+
+    // Invalidate activity logs cache after creating a new log
+    invalidateCache(CACHE_KEYS.ACTIVITY_LOGS)
 
     return NextResponse.json({ success: true })
   } catch (error) {

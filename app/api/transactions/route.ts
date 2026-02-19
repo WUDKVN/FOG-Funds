@@ -1,34 +1,45 @@
 import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
+import { getCached, invalidateCache, CACHE_KEYS } from "@/lib/cache"
 
 function getSql() {
   return neon(process.env.DATABASE_URL!)
 }
 
 // GET - Fetch all transactions (shared across all users)
+// Cached for 60 seconds to reduce Neon queries
 export async function GET() {
   try {
-    const sql = getSql()
+    const transactions = await getCached(CACHE_KEYS.TRANSACTIONS, async () => {
+      const sql = getSql()
 
-    const transactions = await sql`
-      SELECT 
-        fm_txn_id as id,
-        fm_txn_person_id as "personId",
-        fm_txn_description as description,
-        fm_txn_amount as amount,
-        fm_txn_date as date,
-        fm_txn_due_date as "dueDate",
-        fm_txn_comment as comment,
-        fm_txn_is_settled as settled,
-        fm_txn_signature_data as signature,
-        fm_txn_type as type,
-        fm_txn_is_payment as "isPayment",
-        fm_txn_created_at as "createdAt"
-      FROM fm_transactions
-      ORDER BY fm_txn_date DESC
-    `
+      return await sql`
+        SELECT 
+          fm_txn_id as id,
+          fm_txn_person_id as "personId",
+          fm_txn_description as description,
+          fm_txn_amount as amount,
+          fm_txn_date as date,
+          fm_txn_due_date as "dueDate",
+          fm_txn_comment as comment,
+          fm_txn_is_settled as settled,
+          fm_txn_signature_data as signature,
+          fm_txn_type as type,
+          fm_txn_is_payment as "isPayment",
+          fm_txn_created_at as "createdAt"
+        FROM fm_transactions
+        ORDER BY fm_txn_date DESC
+      `
+    })
 
-    return NextResponse.json({ transactions })
+    return NextResponse.json(
+      { transactions },
+      {
+        headers: {
+          "Cache-Control": "private, s-maxage=60, stale-while-revalidate=30",
+        },
+      }
+    )
   } catch (error) {
     console.error("Error fetching transactions:", error)
     return NextResponse.json({ error: "Failed to fetch transactions" }, { status: 500 })
@@ -86,6 +97,10 @@ export async function POST(request: Request) {
       RETURNING fm_txn_id as id
     `
 
+    // Invalidate caches after creating a transaction
+    invalidateCache(CACHE_KEYS.TRANSACTIONS)
+    invalidateCache(CACHE_KEYS.PERSONS)
+
     return NextResponse.json({ id: result[0].id })
   } catch (error) {
     console.error("Error creating transaction:", error)
@@ -115,6 +130,9 @@ export async function PUT(request: Request) {
           fm_txn_updated_at = NOW()
         WHERE fm_txn_id = ${transactionId}
       `
+      // Invalidate caches after updating
+      invalidateCache(CACHE_KEYS.TRANSACTIONS)
+      invalidateCache(CACHE_KEYS.PERSONS)
       return NextResponse.json({ success: true })
     } else {
       // Create a payment transaction
@@ -154,6 +172,9 @@ export async function PUT(request: Request) {
         )
         RETURNING fm_txn_id as id
       `
+      // Invalidate caches after creating a payment
+      invalidateCache(CACHE_KEYS.TRANSACTIONS)
+      invalidateCache(CACHE_KEYS.PERSONS)
       return NextResponse.json({ id: result[0].id })
     }
   } catch (error) {
@@ -179,6 +200,10 @@ export async function DELETE(request: Request) {
     
     // Delete the person
     await sql`DELETE FROM fm_persons WHERE fm_person_id = ${personId}`
+
+    // Invalidate caches after deleting
+    invalidateCache(CACHE_KEYS.TRANSACTIONS)
+    invalidateCache(CACHE_KEYS.PERSONS)
 
     return NextResponse.json({ success: true })
   } catch (error) {
