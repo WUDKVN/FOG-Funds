@@ -12,8 +12,19 @@ export const metadata: Metadata = {
   description: 'Application de gestion de fonds par VONAMAWU',
   generator: 'v0.app',
   icons: {
-    icon: '/images/vonamawu-logo.png',
-    apple: '/images/vonamawu-logo.png',
+    icon: [
+      { url: '/favicon.ico', sizes: '32x32' },
+      { url: '/icon.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  openGraph: {
+    title: 'Fund Management - VONAMAWU',
+    description: 'Application de gestion de fonds par VONAMAWU',
+    siteName: 'VONAMAWU',
+    type: 'website',
   },
 }
 
